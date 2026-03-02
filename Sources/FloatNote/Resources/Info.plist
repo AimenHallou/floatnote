@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hide from Dock and application switcher -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <!-- App metadata -->
+    <key>CFBundleName</key>
+    <string>FloatNote</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.hallouenterprises.floatnote</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleExecutable</key>
+    <string>FloatNote</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <!-- macOS 13+ minimum -->
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+
+    <!-- Allow running without a code signature during development -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+    </dict>
+
+    <!-- Privacy usage strings (required if submitted to App Store) -->
+    <key>NSAccessibilityUsageDescription</key>
+    <string>FloatNote needs Accessibility access to register a system-wide hotkey so you can show or hide the note from any app.</string>
+</dict>
+</plist>
