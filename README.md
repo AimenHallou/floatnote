@@ -1,87 +1,86 @@
 # FloatNote
 
-A minimal floating sticky note for macOS. Frosted glass, always on top, zero Dock footprint.
+A minimal, always-on-top sticky note app for macOS. FloatNote sits on your desktop as a translucent floating panel — perfect for quick notes, checklists, and todos that you need to keep visible while you work.
 
-## What it is
+![macOS](https://img.shields.io/badge/macOS-13.0%2B-blue) ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 
-- **Floating translucent panel** — lives above all your windows, never in the Dock
-- **Autosaves** every keystroke to `~/Library/Application Support/FloatNote/note.txt`
-- **Global hotkey** (⌘⇧Space by default) — show/hide from any app
-- **Remembers** window position and size between launches
-- **Right-click → Settings** to change the hotkey
+## Features
 
-## How to build
+- **Always floating** — stays on top of all windows across every Space
+- **Tabbed notes** — multiple notes in one window, switch instantly between them
+- **Todos** — paste a list and it auto-converts to checkboxes, or toggle any line into a todo
+- **Frosted glass UI** — translucent material background that blends with your desktop
+- **Per-note customization** — font size, opacity, note color, and text color per tab
+- **Global defaults** — set defaults that apply to all notes, override individually per tab
+- **Drag from anywhere** — grab any edge or padding area to reposition the window
+- **Text wrapping** — long lines wrap naturally, pushing content below them down
+- **Select all** — press `Cmd+A` twice to select across all lines, then `Cmd+C` to copy everything
+- **Multi-line paste** — paste a block of text and each line becomes a todo item
+- **Rename tabs** — double-click a tab name to rename it inline
+- **Tab colors** — right-click a tab to quickly change its color
+- **Menu bar icon** — show/hide, new tab, settings from the status bar
+- **Keyboard shortcuts** — `Cmd+/Cmd-` for font size, standard edit shortcuts
+- **Global hotkey** — `Cmd+Shift+Space` to show/hide from any app (requires Accessibility permission)
+- **Persistent** — notes auto-save to disk, window position remembered between launches
+- **Zero Dock footprint** — runs as a menu bar app, no Dock icon
 
-### Option A — Open in Xcode (recommended)
+## Build
 
-1. Clone the repo
-2. Double-click `Package.swift` — Xcode opens it as a Swift Package
-3. Select the `FloatNote` scheme, choose **My Mac** as destination
-4. Press **⌘R** to build and run
-
-### Option B — `swift build` from Terminal
+Requires macOS 13+ and Swift 5.9+.
 
 ```bash
+git clone https://github.com/AimenHallou/floatnote.git
 cd floatnote
-swift build -c release
-# The binary lands at:
-.build/release/FloatNote
-# Run it:
-./.build/release/FloatNote
+swift build
 ```
 
-> **Note:** `swift build` produces a plain binary. For a proper `.app` bundle
-> (with icon, Info.plist, Dock suppression via LSUIElement), use Xcode or wrap
-> the binary yourself. The LSUIElement key in `Resources/Info.plist` is embedded
-> by Xcode's build system; with `swift build` you may see a Dock icon appear
-> briefly until macOS processes the plist.
+Run the built binary:
 
-## First launch — grant Accessibility permission
-
-FloatNote uses `CGEventTap` to intercept the global hotkey system-wide. This
-requires **Accessibility** permission.
-
-On first launch, if the permission isn't granted, FloatNote shows an alert and
-opens **System Settings → Privacy & Security → Accessibility**. Enable FloatNote
-there, and the hotkey activates automatically within 2 seconds — no restart
-needed.
-
-## Default hotkey
-
-**⌘⇧Space** — show or hide the note from anywhere.
-
-## Changing the hotkey
-
-Right-click anywhere on the note → **Settings…**
-
-Click the hotkey button, then press the new combo you want (must include ⌘ or
-⌃). Press **Save**.
-
-## Requirements
-
-- macOS 13 Ventura or later
-- Xcode 15+ (for building; Swift 5.9+)
-
-## File layout
-
-```
-floatnote/
-  Package.swift
-  README.md
-  Sources/
-    FloatNote/
-      main.swift               — entry point, NSApplication bootstrap
-      AppDelegate.swift        — window creation, hotkey wiring
-      ContentView.swift        — SwiftUI panel UI + drag handle
-      NoteModel.swift          — ObservableObject bridging text ↔ disk
-      HotkeyManager.swift      — CGEventTap global hotkey
-      PersistenceManager.swift — note.txt + UserDefaults
-      SettingsView.swift       — settings sheet + key recorder
-      Resources/
-        Info.plist             — LSUIElement, bundle metadata
+```bash
+.build/debug/FloatNote
 ```
 
-## Data location
+Or copy into the `.app` bundle and launch:
 
-Note text: `~/Library/Application Support/FloatNote/note.txt`  
-Preferences (window frame, hotkey): `~/Library/Preferences/` (UserDefaults)
+```bash
+cp .build/debug/FloatNote FloatNote.app/Contents/MacOS/FloatNote
+open FloatNote.app
+```
+
+You can also open `Package.swift` in Xcode and hit `Cmd+R`.
+
+## First Launch
+
+FloatNote uses `CGEventTap` for the global hotkey, which requires **Accessibility** permission. On first launch you'll be prompted to enable it in **System Settings → Privacy & Security → Accessibility**.
+
+## Project Structure
+
+```
+Sources/FloatNote/
+├── main.swift               # App entry point
+├── AppDelegate.swift        # Window/panel setup, menu bar, hotkey
+├── ContentView.swift        # Tab bar, note editor, line text fields
+├── NoteModel.swift          # Data models, global settings, note store
+├── PersistenceManager.swift # UserDefaults + file persistence
+├── SettingsView.swift       # Settings popover (global + per-note)
+├── HotkeyManager.swift      # System-wide hotkey via CGEventTap
+└── Resources/
+    └── Info.plist           # LSUIElement, bundle metadata
+```
+
+## How It Works
+
+FloatNote runs as a menu bar app (`LSUIElement`) with no Dock icon. It creates an `NSPanel` with floating level that stays above all windows. The panel uses `isMovableByWindowBackground` so dragging from any non-interactive area repositions the window.
+
+Each note is a list of lines — plain text or checkboxes. Notes are stored as plain text files in `~/Library/Application Support/FloatNote/`, with settings (colors, opacity, font size) in UserDefaults. Everything auto-saves with a 300ms debounce.
+
+Settings support two levels: **global defaults** that apply to all notes, and **per-note overrides** that take priority. The settings popover shows tabs for every note so you can configure each one without switching.
+
+## Data Location
+
+- Note text: `~/Library/Application Support/FloatNote/<uuid>.txt`
+- Settings: `~/Library/Preferences/` (UserDefaults)
+
+## License
+
+MIT

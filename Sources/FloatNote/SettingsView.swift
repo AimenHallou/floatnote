@@ -1,196 +1,238 @@
 import SwiftUI
-import AppKit
-import Carbon.HIToolbox
+
+// MARK: - Settings View
 
 struct SettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
-
-    @State private var pendingCombo: HotkeyCombo = HotkeyManager.shared.hotkey
-    @State private var isRecording: Bool = false
-    @State private var recordingDisplay: String = ""
+    @ObservedObject var store: NoteStore
+    @ObservedObject private var global = GlobalSettings.shared
+    @State private var selectedTab: UUID? // nil = global
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
 
-            Text("FloatNote Settings")
-                .font(.headline)
+            // ── Tab bar ─────────────────────────────────────────────────
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    settingsTabButton(label: "Global", isSelected: selectedTab == nil) {
+                        selectedTab = nil
+                    }
+
+                    ForEach(store.notes) { note in
+                        settingsTabButton(
+                            label: note.name,
+                            isSelected: selectedTab == note.id,
+                            tint: note.tintColor
+                        ) {
+                            selectedTab = note.id
+                            store.activeNoteId = note.id
+                        }
+                    }
+                }
+            }
 
             Divider()
 
-            // ── Hotkey recorder ───────────────────────────────────────────
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Global Hotkey")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                KeyRecorderField(
-                    combo: $pendingCombo,
-                    isRecording: $isRecording,
-                    recordingDisplay: $recordingDisplay
-                )
+            if selectedTab == nil {
+                GlobalSettingsContent(global: global)
+            } else if let model = store.notes.first(where: { $0.id == selectedTab }) {
+                NoteSettingsContent(model: model, dismiss: dismiss)
             }
 
-            Spacer()
+            Divider()
 
-            // ── Buttons ───────────────────────────────────────────────────
             HStack {
-                Button("Cancel") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-
                 Spacer()
-
-                Button("Save") {
-                    HotkeyManager.shared.updateHotkey(pendingCombo)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
             }
         }
         .padding(20)
-        .frame(width: 300, height: 180)
+        .frame(width: 340)
+        .fixedSize(horizontal: false, vertical: true)
+        .onAppear {
+            selectedTab = store.activeNoteId
+        }
+    }
+
+    private func settingsTabButton(label: String, isSelected: Bool, tint: NoteTint = .clear, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if tint != .clear {
+                    Circle()
+                        .fill(tint.color.opacity(0.8))
+                        .frame(width: 6, height: 6)
+                }
+                Text(label)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? Color.primary.opacity(0.08) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
-// MARK: - KeyRecorderField
+// MARK: - Global Settings Content
 
-/// An NSViewRepresentable that captures key combos via a focused NSTextField.
-struct KeyRecorderField: NSViewRepresentable {
+struct GlobalSettingsContent: View {
 
-    @Binding var combo: HotkeyCombo
-    @Binding var isRecording: Bool
-    @Binding var recordingDisplay: String
+    @ObservedObject var global: GlobalSettings
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(combo: $combo, isRecording: $isRecording, recordingDisplay: $recordingDisplay)
-    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Default settings for all notes")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-    func makeNSView(context: Context) -> KeyRecorderNSView {
-        let view = KeyRecorderNSView()
-        view.coordinator = context.coordinator
-        view.update(combo: combo, isRecording: false)
-        return view
-    }
+            SettingsRowFontSize(
+                value: global.fontSize,
+                decrease: { global.fontSize = max(global.fontSize - 1, 9) },
+                increase: { global.fontSize = min(global.fontSize + 1, 32) }
+            )
 
-    func updateNSView(_ nsView: KeyRecorderNSView, context: Context) {
-        nsView.update(combo: combo, isRecording: isRecording)
-    }
+            SettingsRowOpacity(value: $global.opacity)
 
-    // MARK: Coordinator
+            SettingsRowColor(label: "Note Color", selection: global.tintColor) { global.tintColor = $0 }
 
-    final class Coordinator {
-        @Binding var combo: HotkeyCombo
-        @Binding var isRecording: Bool
-        @Binding var recordingDisplay: String
-
-        init(combo: Binding<HotkeyCombo>, isRecording: Binding<Bool>, recordingDisplay: Binding<String>) {
-            _combo = combo
-            _isRecording = isRecording
-            _recordingDisplay = recordingDisplay
-        }
-
-        func didCapture(_ combo: HotkeyCombo) {
-            self.combo = combo
-            self.isRecording = false
-            self.recordingDisplay = combo.displayString
-        }
-
-        func startRecording() {
-            isRecording = true
-            recordingDisplay = "Press a key combo…"
-        }
-
-        func cancelRecording() {
-            isRecording = false
-            recordingDisplay = combo.displayString
+            SettingsRowColor(label: "Text Color", selection: global.textColor, showLetter: true) { global.textColor = $0 }
         }
     }
 }
 
-// MARK: - KeyRecorderNSView
+// MARK: - Note Settings Content
 
-final class KeyRecorderNSView: NSView {
+struct NoteSettingsContent: View {
 
-    weak var coordinator: KeyRecorderField.Coordinator?
-    private let button = NSButton()
+    @ObservedObject var model: NoteModel
+    let dismiss: DismissAction
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        setupButton()
-    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Settings for \(model.name)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-    required init?(coder: NSCoder) { fatalError() }
+            SettingsRowFontSize(
+                value: model.fontSize,
+                decrease: { model.fontSizeOverride = max(model.fontSize - 1, 9) },
+                increase: { model.fontSizeOverride = min(model.fontSize + 1, 32) }
+            )
 
-    private func setupButton() {
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.bezelStyle = .rounded
-        button.target = self
-        button.action = #selector(buttonClicked)
-        addSubview(button)
-        NSLayoutConstraint.activate([
-            button.leadingAnchor.constraint(equalTo: leadingAnchor),
-            button.trailingAnchor.constraint(equalTo: trailingAnchor),
-            button.topAnchor.constraint(equalTo: topAnchor),
-            button.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
-    }
+            SettingsRowOpacity(value: Binding(
+                get: { model.opacity },
+                set: { model.opacityOverride = $0 }
+            ))
 
-    func update(combo: HotkeyCombo, isRecording: Bool) {
-        if isRecording {
-            button.title = "Press a key combo…"
-            button.highlight(true)
-        } else {
-            button.title = combo.displayString
-            button.highlight(false)
+            SettingsRowColor(label: "Note Color", selection: model.tintColor) {
+                model.tintColorOverride = $0 == .clear ? nil : $0
+            }
+
+            SettingsRowColor(label: "Text Color", selection: model.textColor, showLetter: true) {
+                model.textColorOverride = $0 == .clear ? nil : $0
+            }
+
+            Button("Clear Note", role: .destructive) {
+                model.clearAll()
+                dismiss()
+            }
         }
     }
+}
 
-    @objc private func buttonClicked() {
-        coordinator?.startRecording()
-        window?.makeFirstResponder(self)
+// MARK: - Shared Setting Rows
+
+struct SettingsRowFontSize: View {
+    let value: Double
+    let decrease: () -> Void
+    let increase: () -> Void
+
+    var body: some View {
+        HStack {
+            Text("Font Size")
+            Spacer()
+            Button(action: decrease) {
+                Image(systemName: "minus").frame(width: 20, height: 20)
+            }
+            .buttonStyle(.bordered)
+
+            Text("\(Int(value))")
+                .monospacedDigit()
+                .frame(width: 28, alignment: .center)
+
+            Button(action: increase) {
+                Image(systemName: "plus").frame(width: 20, height: 20)
+            }
+            .buttonStyle(.bordered)
+        }
     }
+}
 
-    override var acceptsFirstResponder: Bool { true }
+struct SettingsRowOpacity: View {
+    @Binding var value: Double
 
-    override func keyDown(with event: NSEvent) {
-        guard let coordinator, coordinator.isRecording else {
-            super.keyDown(with: event)
-            return
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Opacity")
+            Spacer()
+            Slider(value: $value, in: 0.15...1.0)
+                .frame(minWidth: 80, maxWidth: 120)
+            Text("\(Int(value * 100))%")
+                .monospacedDigit()
+                .frame(width: 42, alignment: .trailing)
         }
-
-        // Escape cancels recording.
-        if event.keyCode == UInt16(kVK_Escape) {
-            coordinator.cancelRecording()
-            return
-        }
-
-        // Require at least one modifier key (except Shift alone).
-        let modifierFlags = event.modifierFlags.intersection([
-            .command, .option, .control, .shift
-        ])
-        let hasCommandOrControl = modifierFlags.contains(.command) || modifierFlags.contains(.control)
-        guard hasCommandOrControl else {
-            // Flash the button to indicate invalid combo.
-            NSSound.beep()
-            return
-        }
-
-        var cgFlags: CGEventFlags = []
-        if modifierFlags.contains(.command) { cgFlags.insert(.maskCommand) }
-        if modifierFlags.contains(.shift)   { cgFlags.insert(.maskShift) }
-        if modifierFlags.contains(.option)  { cgFlags.insert(.maskAlternate) }
-        if modifierFlags.contains(.control) { cgFlags.insert(.maskControl) }
-
-        let combo = HotkeyCombo(keyCode: Int64(event.keyCode), modifiers: cgFlags.rawValue)
-        coordinator.didCapture(combo)
-        window?.makeFirstResponder(nil)
     }
+}
 
-    override func flagsChanged(with event: NSEvent) {
-        // Let modifier-only changes pass through while recording.
-        super.flagsChanged(with: event)
+struct SettingsRowColor: View {
+    let label: String
+    let selection: NoteTint
+    var showLetter: Bool = false
+    let onSelect: (NoteTint) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+            HStack(spacing: 6) {
+                ForEach(NoteTint.allCases) { tint in
+                    Button(action: { onSelect(tint) }) {
+                        ZStack {
+                            if tint == .clear {
+                                Circle()
+                                    .strokeBorder(Color.primary.opacity(0.25), lineWidth: 1)
+                                    .frame(width: 20, height: 20)
+                                if showLetter {
+                                    Text("A").font(.system(size: 9, weight: .bold)).foregroundStyle(.primary)
+                                }
+                            } else {
+                                Circle()
+                                    .fill(tint.color.opacity(0.7))
+                                    .frame(width: 20, height: 20)
+                                if showLetter {
+                                    Text("A").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                                }
+                            }
+
+                            if selection == tint {
+                                Circle()
+                                    .strokeBorder(Color.primary, lineWidth: 2)
+                                    .frame(width: 26, height: 26)
+                            }
+                        }
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(tint.label)
+                }
+            }
+        }
     }
 }

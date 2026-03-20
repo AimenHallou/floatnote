@@ -10,9 +10,7 @@ let package = Package(
         .executableTarget(
             name: "FloatNote",
             path: "Sources/FloatNote",
-            resources: [
-                .process("Resources")
-            ]
+            exclude: ["Resources"]
         )
     ]
 )
