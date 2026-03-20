@@ -40,8 +40,9 @@ final class HotkeyManager {
 
     func updateHotkey(_ combo: HotkeyCombo) {
         hotkey = combo
-        removeEventTap()
-        if AXIsProcessTrusted() {
+        // No need to re-register the tap — the callback reads `hotkey` live.
+        // Only register if we don't have one yet.
+        if eventTap == nil && AXIsProcessTrusted() {
             registerEventTap()
         }
     }

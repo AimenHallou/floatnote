@@ -2,12 +2,18 @@ import SwiftUI
 
 // MARK: - Settings View
 
+enum SettingsTab: Hashable {
+    case general
+    case global
+    case note(UUID)
+}
+
 struct SettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: NoteStore
     @ObservedObject private var global = GlobalSettings.shared
-    @State private var selectedTab: UUID? // nil = global
+    @State private var selectedTab: SettingsTab = .general
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -15,17 +21,21 @@ struct SettingsView: View {
             // ── Tab bar ─────────────────────────────────────────────────
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
-                    settingsTabButton(label: "Global", isSelected: selectedTab == nil) {
-                        selectedTab = nil
+                    settingsTabButton(label: "General", isSelected: selectedTab == .general) {
+                        selectedTab = .general
+                    }
+
+                    settingsTabButton(label: "Global", isSelected: selectedTab == .global) {
+                        selectedTab = .global
                     }
 
                     ForEach(store.notes) { note in
                         settingsTabButton(
                             label: note.name,
-                            isSelected: selectedTab == note.id,
+                            isSelected: selectedTab == .note(note.id),
                             tint: note.tintColor
                         ) {
-                            selectedTab = note.id
+                            selectedTab = .note(note.id)
                             store.activeNoteId = note.id
                         }
                     }
@@ -34,10 +44,15 @@ struct SettingsView: View {
 
             Divider()
 
-            if selectedTab == nil {
+            switch selectedTab {
+            case .general:
+                GeneralSettingsContent()
+            case .global:
                 GlobalSettingsContent(global: global)
-            } else if let model = store.notes.first(where: { $0.id == selectedTab }) {
-                NoteSettingsContent(model: model, dismiss: dismiss)
+            case .note(let id):
+                if let model = store.notes.first(where: { $0.id == id }) {
+                    NoteSettingsContent(model: model, dismiss: dismiss)
+                }
             }
 
             Divider()
@@ -50,10 +65,12 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 340)
+        .frame(width: 360)
         .fixedSize(horizontal: false, vertical: true)
         .onAppear {
-            selectedTab = store.activeNoteId
+            if let id = store.activeNoteId {
+                selectedTab = .note(id)
+            }
         }
     }
 
@@ -77,6 +94,189 @@ struct SettingsView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - General Settings
+
+struct GeneralSettingsContent: View {
+
+    @State private var isRecording = false
+    @State private var recordedCombo: HotkeyCombo? = nil
+
+    private var hotkey: HotkeyCombo {
+        recordedCombo ?? HotkeyManager.shared.hotkey
+    }
+
+    private var dataPath: String {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport.appendingPathComponent("FloatNote").path
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+
+            // ── Hotkey ──────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Show / Hide Hotkey")
+                HStack {
+                    Text(hotkey.displayString)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isRecording ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.06))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(isRecording ? Color.accentColor : Color.clear, lineWidth: 1.5)
+                        )
+
+                    if isRecording {
+                        Text("Press new shortcut...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    if isRecording {
+                        Button("Cancel") {
+                            isRecording = false
+                            recordedCombo = nil
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        Button("Change") {
+                            isRecording = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .background(
+                HotkeyRecorderOverlay(isRecording: $isRecording, onRecord: { combo in
+                    recordedCombo = combo
+                    isRecording = false
+                    // Defer event tap re-registration to next run loop
+                    // so the local key monitor is fully torn down first
+                    DispatchQueue.main.async {
+                        HotkeyManager.shared.updateHotkey(combo)
+                    }
+                })
+            )
+
+            // ── Data Location ───────────────────────────────────────────
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Data Location")
+                HStack(spacing: 6) {
+                    Text(dataPath)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Button(action: {
+                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: dataPath)
+                    }) {
+                        Image(systemName: "folder")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in Finder")
+                }
+            }
+
+            // ── About ───────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("FloatNote")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("v1.0.0")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Button(action: {
+                    if let url = URL(string: "https://github.com/AimenHallou/floatnote") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "link")
+                            .font(.system(size: 10))
+                        Text("github.com/AimenHallou/floatnote")
+                            .font(.system(size: 10))
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// MARK: - Hotkey Recorder (NSView overlay to capture key events)
+
+struct HotkeyRecorderOverlay: NSViewRepresentable {
+    @Binding var isRecording: Bool
+    let onRecord: (HotkeyCombo) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = RecorderView()
+        view.onRecord = onRecord
+        context.coordinator.view = view
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let view = nsView as? RecorderView else { return }
+        view.onRecord = onRecord
+        if isRecording {
+            // Install local key monitor
+            view.startMonitoring()
+        } else {
+            view.stopMonitoring()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    class Coordinator {
+        weak var view: RecorderView?
+    }
+
+    final class RecorderView: NSView {
+        var onRecord: ((HotkeyCombo) -> Void)?
+        private var monitor: Any?
+
+        func startMonitoring() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                let flags = CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
+                let hasModifier = flags.contains(.maskCommand) || flags.contains(.maskControl)
+                if hasModifier {
+                    let combo = HotkeyCombo(
+                        keyCode: Int64(event.keyCode),
+                        modifiers: flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl]).rawValue
+                    )
+                    self?.onRecord?(combo)
+                    return nil // consume
+                }
+                return event
+            }
+        }
+
+        func stopMonitoring() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+            }
+            monitor = nil
+        }
+
+        deinit { stopMonitoring() }
     }
 }
 
