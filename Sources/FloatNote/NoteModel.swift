@@ -38,18 +38,54 @@ enum NoteTint: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - LineStyle
+
+enum LineStyle: String, Equatable {
+    case text, heading, bullet, divider
+}
+
+// MARK: - SlashCommand
+
+enum SlashCommand: CaseIterable {
+    case todo, heading, bullet, divider, clearCompleted, plainText
+
+    var label: String {
+        switch self {
+        case .todo:           return "To-do"
+        case .heading:        return "Heading"
+        case .bullet:         return "Bullet"
+        case .divider:        return "Divider"
+        case .clearCompleted: return "Clear completed"
+        case .plainText:      return "Plain text"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .todo:           return "checkmark.square"
+        case .heading:        return "textformat.size.larger"
+        case .bullet:         return "list.bullet"
+        case .divider:        return "minus"
+        case .clearCompleted: return "trash"
+        case .plainText:      return "text.alignleft"
+        }
+    }
+}
+
 // MARK: - NoteLine
 
 struct NoteLine: Identifiable, Equatable {
     let id: UUID
     var isCheckbox: Bool
     var isChecked: Bool
+    var style: LineStyle
     var text: String
 
-    init(id: UUID = UUID(), isCheckbox: Bool = false, isChecked: Bool = false, text: String = "") {
+    init(id: UUID = UUID(), isCheckbox: Bool = false, isChecked: Bool = false, style: LineStyle = .text, text: String = "") {
         self.id = id
         self.isCheckbox = isCheckbox
         self.isChecked = isChecked
+        self.style = style
         self.text = text
     }
 }
@@ -155,6 +191,12 @@ final class NoteModel: ObservableObject, Identifiable {
                 return NoteLine(isCheckbox: true, isChecked: true, text: String(line.dropFirst(6)))
             } else if line.hasPrefix("- [ ] ") {
                 return NoteLine(isCheckbox: true, isChecked: false, text: String(line.dropFirst(6)))
+            } else if line.hasPrefix("# ") {
+                return NoteLine(style: .heading, text: String(line.dropFirst(2)))
+            } else if line.hasPrefix("• ") {
+                return NoteLine(style: .bullet, text: String(line.dropFirst(2)))
+            } else if line == "---" {
+                return NoteLine(style: .divider)
             } else {
                 return NoteLine(text: line)
             }
@@ -165,8 +207,12 @@ final class NoteModel: ObservableObject, Identifiable {
         lines.map { line in
             if line.isCheckbox {
                 return "- [\(line.isChecked ? "x" : " ")] \(line.text)"
-            } else {
-                return line.text
+            }
+            switch line.style {
+            case .heading:  return "# \(line.text)"
+            case .bullet:   return "• \(line.text)"
+            case .divider:  return "---"
+            case .text:     return line.text
             }
         }.joined(separator: "\n")
     }
@@ -205,6 +251,39 @@ final class NoteModel: ObservableObject, Identifiable {
         if !lines[index].isCheckbox {
             lines[index].isChecked = false
         }
+    }
+
+    func applySlashCommand(_ command: SlashCommand, to lineId: UUID) {
+        guard let index = lines.firstIndex(where: { $0.id == lineId }) else { return }
+        switch command {
+        case .todo:
+            lines[index].isCheckbox = true
+            lines[index].style = .text
+        case .heading:
+            lines[index].isCheckbox = false
+            lines[index].isChecked = false
+            lines[index].style = .heading
+        case .bullet:
+            lines[index].isCheckbox = false
+            lines[index].isChecked = false
+            lines[index].style = .bullet
+        case .divider:
+            lines[index].isCheckbox = false
+            lines[index].isChecked = false
+            lines[index].style = .divider
+            lines[index].text = ""
+        case .plainText:
+            lines[index].isCheckbox = false
+            lines[index].isChecked = false
+            lines[index].style = .text
+        case .clearCompleted:
+            clearCompleted()
+        }
+    }
+
+    func clearCompleted() {
+        lines.removeAll { $0.isCheckbox && $0.isChecked }
+        if lines.isEmpty { lines = [NoteLine()] }
     }
 
     @discardableResult

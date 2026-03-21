@@ -1,6 +1,60 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Slash Menu State
+
+final class SlashMenuState: ObservableObject {
+    @Published var isVisible = false
+    @Published var filter = ""
+    @Published var selectedIndex = 0
+    @Published var lineId: UUID?
+
+    var filteredCommands: [SlashCommand] {
+        if filter.isEmpty { return SlashCommand.allCases }
+        return SlashCommand.allCases.filter {
+            $0.label.localizedCaseInsensitiveContains(filter)
+        }
+    }
+
+    var selectedCommand: SlashCommand? {
+        let cmds = filteredCommands
+        guard cmds.indices.contains(selectedIndex) else { return cmds.first }
+        return cmds[selectedIndex]
+    }
+
+    func show(lineId: UUID) {
+        self.lineId = lineId
+        self.filter = ""
+        self.selectedIndex = 0
+        self.isVisible = true
+    }
+
+    func hide() {
+        isVisible = false
+        filter = ""
+        selectedIndex = 0
+        lineId = nil
+    }
+
+    func moveUp() {
+        selectedIndex = max(0, selectedIndex - 1)
+    }
+
+    func moveDown() {
+        selectedIndex = min(filteredCommands.count - 1, selectedIndex + 1)
+    }
+
+    func updateFilter(_ text: String) {
+        // Extract text after "/"
+        if let slashIndex = text.firstIndex(of: "/") {
+            filter = String(text[text.index(after: slashIndex)...])
+        } else {
+            filter = ""
+        }
+        selectedIndex = 0
+    }
+}
+
 // MARK: - ContentView
 
 struct ContentView: View {
@@ -19,7 +73,7 @@ struct ContentView: View {
 
             VStack(spacing: 0) {
                 // ── Tab bar ──────────────────────────────────────────────
-                TabBar(isWindowHovering: isHovering)
+                TabBar(isWindowHovering: isHovering, onOpenSettings: { showSettings = true })
 
                 // ── Note editors (all alive, only active visible) ────────
                 ZStack {
@@ -27,8 +81,7 @@ struct ContentView: View {
                         let isActive = store.activeNoteId == note.id
                         NoteEditorView(
                             model: note,
-                            isWindowHovering: isHovering,
-                            onOpenSettings: { showSettings = true }
+                            isWindowHovering: isHovering
                         )
                         .opacity(isActive ? 1 : 0)
                         .allowsHitTesting(isActive)
@@ -57,14 +110,16 @@ struct TabBar: View {
 
     @EnvironmentObject private var store: NoteStore
     let isWindowHovering: Bool
+    let onOpenSettings: () -> Void
     @State private var editingTabId: UUID?
     @State private var editingName = ""
     @State private var hoveredTabId: UUID?
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 1) {
-                ForEach(store.notes) { note in
+        HStack(spacing: 4) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 1) {
+                    ForEach(store.notes) { note in
                     TabItemView(
                         note: note,
                         isActive: store.activeNoteId == note.id,
@@ -106,6 +161,22 @@ struct TabBar: View {
             .padding(.horizontal, 6)
             .padding(.top, 6)
             .padding(.bottom, 4)
+        }
+
+            // ── Settings button (top right) ─────────────────────────
+            if isWindowHovering {
+                Button(action: onOpenSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(.plain)
+                .pointerOnHover()
+                .help("Settings")
+                .padding(.trailing, 6)
+                .padding(.top, 6)
+            }
         }
         // Separator line between tabs and content
         Divider()
@@ -216,6 +287,10 @@ struct RenameField: NSViewRepresentable {
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = NSFont.systemFont(ofSize: 11)
+        field.lineBreakMode = .byTruncatingTail
+        field.maximumNumberOfLines = 1
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
         field.stringValue = text
         field.delegate = context.coordinator
         // Auto-focus
@@ -257,8 +332,8 @@ struct NoteEditorView: View {
 
     @ObservedObject var model: NoteModel
     @ObservedObject private var global = GlobalSettings.shared
+    @StateObject private var slashMenu = SlashMenuState()
     let isWindowHovering: Bool
-    let onOpenSettings: () -> Void
     @State private var focusedLineId: UUID?
     @State private var allLinesSelected = false
     @State private var keyMonitor: Any?
@@ -277,56 +352,103 @@ struct NoteEditorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach($model.lines) { $line in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            if line.isCheckbox {
-                                Button(action: { model.toggleCheckbox(line.id) }) {
-                                    Image(systemName: line.isChecked ? "checkmark.square.fill" : "square")
-                                        .font(.system(size: CGFloat(model.fontSize) * 0.9))
-                                        .foregroundStyle(line.isChecked ? .secondary : .primary)
+                        if line.style == .divider {
+                            // ── Divider line ─────────────────────────────
+                            Divider()
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 4)
+                        } else {
+                            // ── Editable line ────────────────────────────
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                if line.isCheckbox {
+                                    Button(action: { model.toggleCheckbox(line.id) }) {
+                                        Image(systemName: line.isChecked ? "checkmark.square.fill" : "square")
+                                            .font(.system(size: CGFloat(model.fontSize) * 0.9))
+                                            .foregroundStyle(line.isChecked ? .secondary : .primary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .pointerOnHover()
+                                } else if line.style == .bullet {
+                                    Text("\u{2022}")
+                                        .font(.system(size: CGFloat(model.fontSize), design: .rounded))
+                                        .foregroundStyle(.secondary)
                                 }
-                                .buttonStyle(.plain)
-                                .pointerOnHover()
-                            }
 
-                            LineTextField(
-                                text: $line.text,
-                                lineId: line.id,
-                                fontSize: CGFloat(model.fontSize),
-                                isChecked: line.isCheckbox && line.isChecked,
-                                textColor: model.textColor,
-                                onSubmit: {
-                                    let newId = model.insertLine(
-                                        after: line.id,
-                                        checkbox: line.isCheckbox
-                                    )
-                                    postFocus(lineId: newId, cursorAtEnd: false)
-                                },
-                                onBackspaceEmpty: {
-                                    if line.isCheckbox {
-                                        model.toggleLineType(line.id)
-                                        return
+                                LineTextField(
+                                    text: $line.text,
+                                    lineId: line.id,
+                                    fontSize: line.style == .heading
+                                        ? CGFloat(model.fontSize * 1.4)
+                                        : CGFloat(model.fontSize),
+                                    isBold: line.style == .heading,
+                                    isChecked: line.isCheckbox && line.isChecked,
+                                    textColor: model.textColor,
+                                    onSubmit: {
+                                        if line.isCheckbox && line.text.isEmpty {
+                                            model.toggleLineType(line.id)
+                                            return
+                                        }
+                                        if line.style == .bullet && line.text.isEmpty {
+                                            line.style = .text
+                                            return
+                                        }
+                                        let newId = model.insertLine(
+                                            after: line.id,
+                                            checkbox: line.isCheckbox
+                                        )
+                                        // Carry over bullet style
+                                        if line.style == .bullet {
+                                            if let idx = model.lines.firstIndex(where: { $0.id == newId }) {
+                                                model.lines[idx].style = .bullet
+                                            }
+                                        }
+                                        postFocus(lineId: newId, cursorAtEnd: false)
+                                    },
+                                    onBackspaceEmpty: {
+                                        if line.isCheckbox {
+                                            model.toggleLineType(line.id)
+                                            return
+                                        }
+                                        if line.style != .text {
+                                            line.style = .text
+                                            return
+                                        }
+                                        guard let index = model.lines.firstIndex(where: { $0.id == line.id }),
+                                              index > 0 else { return }
+                                        let prevId = model.lines[index - 1].id
+                                        model.deleteLine(line.id)
+                                        postFocus(lineId: prevId, cursorAtEnd: true)
+                                    },
+                                    onPaste: { pastedText in
+                                        let existing = line.text
+                                        if let lastId = model.pasteLines(pastedText, at: line.id, appendToExisting: existing) {
+                                            postFocus(lineId: lastId, cursorAtEnd: true)
+                                        }
+                                    },
+                                    slashMenu: slashMenu,
+                                    onSlashCommand: { command in
+                                        model.applySlashCommand(command, to: line.id)
                                     }
-                                    guard let index = model.lines.firstIndex(where: { $0.id == line.id }),
-                                          index > 0 else { return }
-                                    let prevId = model.lines[index - 1].id
-                                    model.deleteLine(line.id)
-                                    postFocus(lineId: prevId, cursorAtEnd: true)
-                                },
-                                onPaste: { pastedText in
-                                    let existing = line.text
-                                    if let lastId = model.pasteLines(pastedText, at: line.id, appendToExisting: existing) {
-                                        postFocus(lineId: lastId, cursorAtEnd: true)
-                                    }
-                                }
+                                )
+                            }
+                            .padding(.vertical, 1)
+                            .background(
+                                allLinesSelected
+                                    ? RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                        .fill(Color.accentColor.opacity(0.2))
+                                    : nil
                             )
+                            .overlay(alignment: .topLeading) {
+                                if slashMenu.isVisible && slashMenu.lineId == line.id {
+                                    SlashMenuOverlay(slashMenu: slashMenu) { command in
+                                        model.applySlashCommand(command, to: line.id)
+                                        slashMenu.hide()
+                                    }
+                                    .offset(y: 24)
+                                }
+                            }
+                            .zIndex(slashMenu.lineId == line.id ? 1 : 0)
                         }
-                        .padding(.vertical, 1)
-                        .background(
-                            allLinesSelected
-                                ? RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .fill(Color.accentColor.opacity(0.2))
-                                : nil
-                        )
                     }
 
                     Color.clear
@@ -349,33 +471,6 @@ struct NoteEditorView: View {
                 }
             }
 
-            // ── Bottom toolbar (hover-only) ──────────────────────────────
-            HStack(spacing: 12) {
-                Button(action: checkboxAction) {
-                    Image(systemName: "checklist")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .pointerOnHover()
-                .help("Toggle checkbox")
-
-                Spacer()
-
-                Button(action: onOpenSettings) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .pointerOnHover()
-                .help("Settings")
-            }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 6)
-            .frame(height: isWindowHovering ? nil : 0)
-            .opacity(isWindowHovering ? 1 : 0)
-            .clipped()
         }
         } // ZStack
         .onReceive(NotificationCenter.default.publisher(for: .floatNoteLineFocused)) { notification in
@@ -429,14 +524,52 @@ struct NoteEditorView: View {
         }
     }
 
-    private func checkboxAction() {
-        if let focusedId = focusedLineId,
-           model.lines.contains(where: { $0.id == focusedId }) {
-            model.toggleLineType(focusedId)
-        } else {
-            let lastId = model.lines.last?.id ?? UUID()
-            let newId = model.insertLine(after: lastId, checkbox: true)
-            postFocus(lineId: newId, cursorAtEnd: false)
+}
+
+// MARK: - Slash Menu Overlay
+
+struct SlashMenuOverlay: View {
+    @ObservedObject var slashMenu: SlashMenuState
+    let onSelect: (SlashCommand) -> Void
+
+    var body: some View {
+        let commands = slashMenu.filteredCommands
+        if !commands.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(commands.enumerated()), id: \.element) { index, command in
+                    Button(action: { onSelect(command) }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: command.icon)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16)
+                            Text(command.label)
+                                .font(.system(size: 12))
+                            Spacer()
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            index == slashMenu.selectedIndex
+                                ? RoundedRectangle(cornerRadius: 4).fill(Color.accentColor.opacity(0.15))
+                                : nil
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 4)
+            .frame(width: 180)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.ultraThickMaterial)
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+            )
         }
     }
 }
@@ -448,11 +581,14 @@ struct LineTextField: View {
     @Binding var text: String
     let lineId: UUID
     let fontSize: CGFloat
+    var isBold: Bool = false
     let isChecked: Bool
     let textColor: NoteTint
     let onSubmit: () -> Void
     let onBackspaceEmpty: () -> Void
     var onPaste: ((_ clipboardText: String) -> Void)?
+    var slashMenu: SlashMenuState?
+    var onSlashCommand: ((_ command: SlashCommand) -> Void)?
 
     @State private var dynamicHeight: CGFloat = 20
 
@@ -462,11 +598,14 @@ struct LineTextField: View {
             dynamicHeight: $dynamicHeight,
             lineId: lineId,
             fontSize: fontSize,
+            isBold: isBold,
             isChecked: isChecked,
             textColor: textColor,
             onSubmit: onSubmit,
             onBackspaceEmpty: onBackspaceEmpty,
-            onPaste: onPaste
+            onPaste: onPaste,
+            slashMenu: slashMenu,
+            onSlashCommand: onSlashCommand
         )
         .frame(height: dynamicHeight)
     }
@@ -517,11 +656,14 @@ struct LineTextFieldRepresentable: NSViewRepresentable {
     @Binding var dynamicHeight: CGFloat
     let lineId: UUID
     let fontSize: CGFloat
+    var isBold: Bool = false
     let isChecked: Bool
     let textColor: NoteTint
     let onSubmit: () -> Void
     let onBackspaceEmpty: () -> Void
     var onPaste: ((_ clipboardText: String) -> Void)?
+    var slashMenu: SlashMenuState?
+    var onSlashCommand: ((_ command: SlashCommand) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -553,7 +695,9 @@ struct LineTextFieldRepresentable: NSViewRepresentable {
             DispatchQueue.main.async { self.dynamicHeight = height }
         }
 
-        let base = NSFont.systemFont(ofSize: fontSize)
+        let base = isBold
+            ? NSFont.boldSystemFont(ofSize: fontSize)
+            : NSFont.systemFont(ofSize: fontSize)
         let font: NSFont
         if let desc = base.fontDescriptor.withDesign(.rounded) {
             font = NSFont(descriptor: desc, size: fontSize) ?? base
@@ -631,6 +775,17 @@ struct LineTextFieldRepresentable: NSViewRepresentable {
             guard let field = obj.object as? NSTextField else { return }
             parent.text = field.stringValue
             (field as? WrappingTextField)?.recalcHeight()
+
+            // Slash menu: detect "/" and manage filtering
+            guard let sm = parent.slashMenu else { return }
+            if field.stringValue.contains("/") {
+                if !sm.isVisible {
+                    sm.show(lineId: parent.lineId)
+                }
+                sm.updateFilter(field.stringValue)
+            } else if sm.isVisible && sm.lineId == parent.lineId {
+                sm.hide()
+            }
         }
 
         func handlePaste(_ text: String) {
@@ -642,6 +797,39 @@ struct LineTextFieldRepresentable: NSViewRepresentable {
             textView: NSTextView,
             doCommandBy commandSelector: Selector
         ) -> Bool {
+            // Slash menu key handling
+            if let sm = parent.slashMenu, sm.isVisible && sm.lineId == parent.lineId {
+                if commandSelector == #selector(NSResponder.moveDown(_:)) {
+                    sm.moveDown()
+                    return true
+                }
+                if commandSelector == #selector(NSResponder.moveUp(_:)) {
+                    sm.moveUp()
+                    return true
+                }
+                if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                    if let command = sm.selectedCommand {
+                        // Clear the slash text
+                        if let field = self.field {
+                            field.stringValue = ""
+                            parent.text = ""
+                        }
+                        sm.hide()
+                        parent.onSlashCommand?(command)
+                    }
+                    return true
+                }
+                if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                    // Clear the slash text and dismiss
+                    if let field = self.field {
+                        field.stringValue = ""
+                        parent.text = ""
+                    }
+                    sm.hide()
+                    return true
+                }
+            }
+
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 parent.onSubmit()
                 return true
