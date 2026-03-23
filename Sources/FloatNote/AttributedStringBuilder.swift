@@ -7,15 +7,6 @@ extension NSAttributedString.Key {
     static let floatNoteLineStyle = NSAttributedString.Key("floatNoteLineStyle")
 }
 
-// MARK: - Temporary Stubs (will be moved to NoteTextView.swift in Task 2)
-
-class CheckboxAttachment: NSTextAttachment {
-    var isChecked: Bool = false
-    var lineIndex: Int = 0
-}
-
-class DividerAttachment: NSTextAttachment {}
-
 // MARK: - AttributedStringBuilder
 
 enum AttributedStringBuilder {
