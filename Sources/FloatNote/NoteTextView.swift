@@ -15,8 +15,28 @@ extension Notification.Name {
 // MARK: - CheckboxAttachment
 
 final class CheckboxAttachment: NSTextAttachment {
-    var isChecked: Bool = false
+    var isChecked: Bool = false {
+        didSet { updateImage() }
+    }
     var lineIndex: Int = 0
+
+    override init(data contentData: Data?, ofType uti: String?) {
+        super.init(data: contentData, ofType: uti)
+        updateImage()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        updateImage()
+    }
+
+    func updateImage() {
+        let symbolName = isChecked ? "checkmark.square.fill" : "square"
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+            .applying(.init(paletteColors: [.labelColor]))
+        self.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+    }
 
     override func attachmentBounds(
         for textContainer: NSTextContainer?,
@@ -24,7 +44,7 @@ final class CheckboxAttachment: NSTextAttachment {
         glyphPosition position: CGPoint,
         characterIndex charIndex: Int
     ) -> CGRect {
-        let size = lineFrag.height * 0.75
+        let size: CGFloat = 16
         let yOffset = (lineFrag.height - size) / 2
         return CGRect(x: 0, y: yOffset, width: size, height: size)
     }

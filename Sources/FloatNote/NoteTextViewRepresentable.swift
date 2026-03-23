@@ -56,6 +56,11 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
         // Observe checkbox toggle notifications
         context.coordinator.startObserving()
 
+        // Auto-focus the text view
+        DispatchQueue.main.async {
+            textView.window?.makeFirstResponder(textView)
+        }
+
         return scrollView
     }
 
@@ -236,23 +241,22 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
                 slashMenu.filter = filterText
                 slashMenu.selectedIndex = 0
 
-                // Calculate screen position for overlay
+                // Calculate position for overlay
                 if let layoutManager = textView.layoutManager,
                    let textContainer = textView.textContainer {
                     let glyphRange = layoutManager.glyphRange(
                         forCharacterRange: NSRange(location: slashRange.location, length: 1),
                         actualCharacterRange: nil
                     )
-                    var glyphRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-                    glyphRect.origin.x += textView.textContainerInset.width
-                    glyphRect.origin.y += textView.textContainerInset.height
-
-                    // Convert to window coordinates
-                    let viewPoint = textView.convert(
-                        CGPoint(x: glyphRect.minX, y: glyphRect.maxY),
-                        to: nil
-                    )
-                    slashMenuPosition.wrappedValue = viewPoint
+                    let glyphRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+                    // glyphRect is in text container coords; add inset to get text view coords
+                    let x = glyphRect.minX + textView.textContainerInset.width
+                    // Flip Y: text container Y is top-down, add line height for below-cursor
+                    let y = glyphRect.maxY + textView.textContainerInset.height + 4
+                    // Subtract scroll position
+                    let scrollOffset = textView.enclosingScrollView?.contentView.bounds.origin.y ?? 0
+                    let point = CGPoint(x: x, y: y - scrollOffset)
+                    slashMenuPosition.wrappedValue = point
                 }
             } else {
                 if slashMenu.isVisible {

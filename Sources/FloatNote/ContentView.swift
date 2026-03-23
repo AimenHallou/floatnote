@@ -328,7 +328,7 @@ struct NoteEditorView: View {
     @State private var slashMenuPosition: CGPoint?
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             // ── Tint overlay (reacts to model changes) ──────────────────
             if model.tintColor != .clear {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -350,7 +350,9 @@ struct NoteEditorView: View {
                         userInfo: ["command": command]
                     )
                 }
-                .position(x: pos.x, y: pos.y)
+                .fixedSize()
+                .padding(.leading, pos.x)
+                .padding(.top, pos.y)
             }
         }
     }
