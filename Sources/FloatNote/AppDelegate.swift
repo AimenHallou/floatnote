@@ -5,10 +5,7 @@ import Combine
 // MARK: - Notification Names
 
 extension Notification.Name {
-    static let floatNoteOpenSettings   = Notification.Name("floatnote.openSettings")
-    static let floatNoteFocusLine      = Notification.Name("floatnote.focusLine")
-    static let floatNoteLineFocused    = Notification.Name("floatnote.lineFocused")
-    static let floatNoteSelectAllLines = Notification.Name("floatnote.selectAllLines")
+    static let floatNoteOpenSettings    = Notification.Name("floatnote.openSettings")
 }
 
 // MARK: - FloatingPanel

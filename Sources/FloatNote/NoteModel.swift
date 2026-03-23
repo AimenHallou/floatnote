@@ -158,12 +158,13 @@ final class NoteModel: ObservableObject, Identifiable {
         didSet { saveConfig() }
     }
 
-    // Effective values (override ?? global)
-    var fontSize: Double { fontSizeOverride ?? GlobalSettings.shared.fontSize }
-    var opacity: Double { opacityOverride ?? GlobalSettings.shared.opacity }
-    var tintColor: NoteTint { tintColorOverride ?? GlobalSettings.shared.tintColor }
-    var textColor: NoteTint { textColorOverride ?? GlobalSettings.shared.textColor }
+    // Effective values (override ?? global), kept in sync via Combine
+    @Published private(set) var fontSize: Double = 13
+    @Published private(set) var opacity: Double = 0.85
+    @Published private(set) var tintColor: NoteTint = .clear
+    @Published private(set) var textColor: NoteTint = .clear
 
+    private var effectiveCancellables = Set<AnyCancellable>()
     private var saveWorkItem: DispatchWorkItem?
     private let persistence = PersistenceManager.shared
 
@@ -177,9 +178,42 @@ final class NoteModel: ObservableObject, Identifiable {
         self.textColorOverride = cfg.textColor
         self.isCollapsed = cfg.isCollapsed
 
+        // Set initial effective values
+        let g = GlobalSettings.shared
+        self.fontSize = cfg.fontSize ?? g.fontSize
+        self.opacity = cfg.opacity ?? g.opacity
+        self.tintColor = cfg.tintColor ?? g.tintColor
+        self.textColor = cfg.textColor ?? g.textColor
+
         let content = text ?? persistence.loadNote(id: id)
         lines = Self.parse(content)
         if lines.isEmpty { lines = [NoteLine()] }
+
+        setupEffectiveValues()
+    }
+
+    private func setupEffectiveValues() {
+        let g = GlobalSettings.shared
+
+        $fontSizeOverride.combineLatest(g.$fontSize)
+            .map { $0 ?? $1 }
+            .sink { [weak self] in self?.fontSize = $0 }
+            .store(in: &effectiveCancellables)
+
+        $opacityOverride.combineLatest(g.$opacity)
+            .map { $0 ?? $1 }
+            .sink { [weak self] in self?.opacity = $0 }
+            .store(in: &effectiveCancellables)
+
+        $tintColorOverride.combineLatest(g.$tintColor)
+            .map { $0 ?? $1 }
+            .sink { [weak self] in self?.tintColor = $0 }
+            .store(in: &effectiveCancellables)
+
+        $textColorOverride.combineLatest(g.$textColor)
+            .map { $0 ?? $1 }
+            .sink { [weak self] in self?.textColor = $0 }
+            .store(in: &effectiveCancellables)
     }
 
     // MARK: - Parse / Serialize
@@ -219,40 +253,6 @@ final class NoteModel: ObservableObject, Identifiable {
 
     // MARK: - Line Operations
 
-    @discardableResult
-    func insertLine(after id: UUID, checkbox: Bool = false) -> UUID {
-        let newLine = NoteLine(isCheckbox: checkbox)
-        if let index = lines.firstIndex(where: { $0.id == id }) {
-            lines.insert(newLine, at: index + 1)
-        } else {
-            lines.append(newLine)
-        }
-        return newLine.id
-    }
-
-    func deleteLine(_ id: UUID) {
-        guard lines.count > 1 else {
-            if let index = lines.firstIndex(where: { $0.id == id }) {
-                lines[index] = NoteLine()
-            }
-            return
-        }
-        lines.removeAll { $0.id == id }
-    }
-
-    func toggleCheckbox(_ id: UUID) {
-        guard let index = lines.firstIndex(where: { $0.id == id }) else { return }
-        lines[index].isChecked.toggle()
-    }
-
-    func toggleLineType(_ id: UUID) {
-        guard let index = lines.firstIndex(where: { $0.id == id }) else { return }
-        lines[index].isCheckbox.toggle()
-        if !lines[index].isCheckbox {
-            lines[index].isChecked = false
-        }
-    }
-
     func applySlashCommand(_ command: SlashCommand, to lineId: UUID) {
         guard let index = lines.firstIndex(where: { $0.id == lineId }) else { return }
         switch command {
@@ -284,28 +284,6 @@ final class NoteModel: ObservableObject, Identifiable {
     func clearCompleted() {
         lines.removeAll { $0.isCheckbox && $0.isChecked }
         if lines.isEmpty { lines = [NoteLine()] }
-    }
-
-    @discardableResult
-    func pasteLines(_ text: String, at lineId: UUID, appendToExisting: String) -> UUID? {
-        let rawLines = text.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        guard !rawLines.isEmpty else { return nil }
-        guard let index = lines.firstIndex(where: { $0.id == lineId }) else { return nil }
-
-        lines[index].text = appendToExisting + rawLines[0]
-        lines[index].isCheckbox = true
-
-        var lastId = lineId
-        for i in 1..<rawLines.count {
-            let newLine = NoteLine(isCheckbox: true, text: rawLines[i])
-            if let insertIdx = lines.firstIndex(where: { $0.id == lastId }) {
-                lines.insert(newLine, at: insertIdx + 1)
-            }
-            lastId = newLine.id
-        }
-        return lastId
     }
 
     func clearAll() {
