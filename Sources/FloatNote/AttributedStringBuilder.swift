@@ -21,11 +21,18 @@ enum AttributedStringBuilder {
         let result = NSMutableAttributedString()
         let resolvedColor = textColor.nsColor
 
+        let baseFont = roundedFont(size: fontSize, bold: false)
+        let newlineAttrs: [NSAttributedString.Key: Any] = [
+            .font: baseFont,
+            .foregroundColor: resolvedColor,
+            .floatNoteLineStyle: LineStyle.text.rawValue
+        ]
+
         for (index, line) in lines.enumerated() {
             let paragraph = buildParagraph(for: line, fontSize: fontSize, resolvedColor: resolvedColor, lineIndex: index)
             // Append newline between lines (not after the last one)
             if index < lines.count - 1 {
-                paragraph.append(NSAttributedString(string: "\n"))
+                paragraph.append(NSAttributedString(string: "\n", attributes: newlineAttrs))
             }
             result.append(paragraph)
         }
@@ -207,7 +214,12 @@ enum AttributedStringBuilder {
         case (false, .divider):
             let attachment = DividerAttachment()
             let attachmentString = NSMutableAttributedString(attachment: attachment)
-            attachmentString.addAttributes(styleTag, range: NSRange(location: 0, length: attachmentString.length))
+            let dividerAttrs: [NSAttributedString.Key: Any] = [
+                .floatNoteLineStyle: LineStyle.divider.rawValue,
+                .font: roundedFont(size: fontSize, bold: false),
+                .foregroundColor: resolvedColor
+            ]
+            attachmentString.addAttributes(dividerAttrs, range: NSRange(location: 0, length: attachmentString.length))
             return attachmentString
         }
     }

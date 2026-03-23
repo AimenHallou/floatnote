@@ -132,6 +132,8 @@ final class DividerAttachment: NSTextAttachment {
 final class NoteTextView: NSTextView {
 
     var slashMenu: SlashMenuState?
+    var baseFontSize: CGFloat = 13
+    var baseTextColor: NSColor = .labelColor
 
     // MARK: Init
 
@@ -266,43 +268,24 @@ final class NoteTextView: NSTextView {
             }
         } else {
             super.insertNewline(sender)
+            // Always ensure typing attributes are correct after newline
+            let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+            typingAttributes = [
+                .font: font,
+                .foregroundColor: baseTextColor,
+                .floatNoteLineStyle: LineStyle.text.rawValue
+            ]
         }
     }
 
     // MARK: - deleteBackward
 
     override func deleteBackward(_ sender: Any?) {
-        guard let storage = textStorage,
-              let selectedRange = selectedRanges.first as? NSRange else {
-            super.deleteBackward(sender)
-            return
-        }
-
-        let cursorPos = selectedRange.location
-        let fullString = storage.string as NSString
-        let paraRange = fullString.paragraphRange(for: NSRange(location: cursorPos, length: 0))
-
-        // Check if cursor is right after checkbox prefix (attachment char + space = 2 chars)
-        let isCheckboxLine = paragraphStartsWithCheckbox(paraRange: paraRange, storage: storage)
-        if isCheckboxLine {
-            let prefixEnd = paraRange.location + 2 // \uFFFC + space
-            if cursorPos == prefixEnd || cursorPos == paraRange.location {
-                removeLinePrefix(in: paraRange, storage: storage)
-                return
-            }
-        }
-
-        // Check if cursor is right after bullet prefix ("• " = 2 chars after paragraph start)
-        let styleTag = storage.attribute(.floatNoteLineStyle, at: paraRange.location, effectiveRange: nil) as? String
-        if styleTag == LineStyle.bullet.rawValue {
-            let bulletPrefixEnd = paraRange.location + 2 // "• " is 2 UTF-16 code units
-            if cursorPos <= bulletPrefixEnd && cursorPos >= paraRange.location {
-                removeLinePrefix(in: paraRange, storage: storage)
-                return
-            }
-        }
-
         super.deleteBackward(sender)
+        // After any deletion, ensure typing attributes have the correct color/font
+        let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+        typingAttributes[.font] = font
+        typingAttributes[.foregroundColor] = baseTextColor
     }
 
     // MARK: - Helpers
@@ -314,11 +297,17 @@ final class NoteTextView: NSTextView {
         let attachment = CheckboxAttachment()
         attachment.isChecked = false
 
-        let attachmentString = NSMutableAttributedString(attachment: attachment)
-        let styleAttrs: [NSAttributedString.Key: Any] = [.floatNoteLineStyle: LineStyle.text.rawValue]
-        attachmentString.addAttributes(styleAttrs, range: NSRange(location: 0, length: attachmentString.length))
+        let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: baseTextColor,
+            .floatNoteLineStyle: "checkbox"
+        ]
 
-        let space = NSAttributedString(string: " ", attributes: styleAttrs)
+        let attachmentString = NSMutableAttributedString(attachment: attachment)
+        attachmentString.addAttributes(attrs, range: NSRange(location: 0, length: attachmentString.length))
+
+        let space = NSAttributedString(string: " ", attributes: attrs)
 
         guard let insertRange = selectedRanges.first as? NSRange else { return }
 
@@ -331,6 +320,7 @@ final class NoteTextView: NSTextView {
 
             let newCursor = NSRange(location: insertRange.location + 2, length: 0)
             setSelectedRange(newCursor)
+            typingAttributes = attrs
             didChangeText()
         }
     }
@@ -339,13 +329,24 @@ final class NoteTextView: NSTextView {
         guard let storage = textStorage,
               let insertRange = selectedRanges.first as? NSRange else { return }
 
-        let styleAttrs: [NSAttributedString.Key: Any] = [.floatNoteLineStyle: LineStyle.bullet.rawValue]
-        let bullet = NSAttributedString(string: "• ", attributes: styleAttrs)
+        let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .floatNoteLineStyle: LineStyle.bullet.rawValue
+        ]
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: baseTextColor,
+            .floatNoteLineStyle: LineStyle.bullet.rawValue
+        ]
+        let bullet = NSAttributedString(string: "• ", attributes: attrs)
 
         if shouldChangeText(in: insertRange, replacementString: "• ") {
             storage.replaceCharacters(in: insertRange, with: bullet)
             let newCursor = NSRange(location: insertRange.location + 2, length: 0)
             setSelectedRange(newCursor)
+            typingAttributes = textAttrs
             didChangeText()
         }
     }
@@ -394,6 +395,22 @@ final class NoteTextView: NSTextView {
 
             let newCursor = NSRange(location: paraRange.location, length: 0)
             setSelectedRange(newCursor)
+
+            // Reset typing attributes to base font/color after prefix removal
+            let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+            typingAttributes = [
+                .font: font,
+                .foregroundColor: baseTextColor,
+                .floatNoteLineStyle: LineStyle.text.rawValue
+            ]
+
+            // Also fix remaining text color if any text is left on this line
+            let newParaRange2 = (storage.string as NSString).paragraphRange(for: newCursor)
+            if newParaRange2.length > 0 {
+                storage.addAttribute(.foregroundColor, value: baseTextColor, range: newParaRange2)
+                storage.addAttribute(.font, value: font, range: newParaRange2)
+            }
+
             didChangeText()
         }
     }

@@ -37,8 +37,10 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
         )
         textView.textStorage?.setAttributedString(attrString)
 
-        // Set typing attributes for new text
+        // Set typing attributes and base font/color for new text
         textView.typingAttributes = defaultTypingAttributes()
+        textView.baseFontSize = CGFloat(model.fontSize)
+        textView.baseTextColor = model.textColor.nsColor
 
         // Store coordinator reference to the text view
         context.coordinator.textView = textView
@@ -70,6 +72,9 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
         let coordinator = context.coordinator
         guard let textView = coordinator.textView else { return }
 
+        // Skip if this update was triggered by typing (textDidChange set the flag)
+        if coordinator.isUpdatingFromModel { return }
+
         let fontChanged = model.fontSize != coordinator.previousFontSize
         let colorChanged = model.textColor != coordinator.previousTextColor
         let currentHash = contentHash(model.lines)
@@ -87,6 +92,8 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
         )
         textView.textStorage?.setAttributedString(attrString)
         textView.typingAttributes = defaultTypingAttributes()
+        textView.baseFontSize = CGFloat(model.fontSize)
+        textView.baseTextColor = model.textColor.nsColor
 
         coordinator.previousFontSize = model.fontSize
         coordinator.previousTextColor = model.textColor
@@ -112,7 +119,6 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
     private func contentHash(_ lines: [NoteLine]) -> Int {
         var hasher = Hasher()
         for line in lines {
-            hasher.combine(line.id)
             hasher.combine(line.text)
             hasher.combine(line.isCheckbox)
             hasher.combine(line.isChecked)
@@ -179,8 +185,15 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
                 from: storage,
                 fontSize: CGFloat(model.fontSize)
             )
+
+            // Set flag BEFORE updating model to prevent updateNSView from rebuilding
+            isUpdatingFromModel = true
             model.lines = newLines
             previousContentHash = hashLines(newLines)
+            // Defer resetting the flag so the SwiftUI update cycle sees it
+            DispatchQueue.main.async { [weak self] in
+                self?.isUpdatingFromModel = false
+            }
 
             // Slash detection
             detectSlash(in: textView)
@@ -193,16 +206,13 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
         ) -> Bool {
             guard let storage = textView.textStorage else { return true }
 
-            // Check if any character in the affected range is a DividerAttachment
-            if affectedCharRange.length > 0 {
-                var hasDivider = false
-                storage.enumerateAttribute(.attachment, in: affectedCharRange, options: []) { value, _, stop in
-                    if value is DividerAttachment {
-                        hasDivider = true
-                        stop.pointee = true
-                    }
+            // Block typing INTO a divider (but allow deleting through it)
+            if let replacement = replacementString, !replacement.isEmpty,
+               affectedCharRange.location < storage.length {
+                let attrs = storage.attributes(at: affectedCharRange.location, effectiveRange: nil)
+                if attrs[.attachment] is DividerAttachment {
+                    return false
                 }
-                if hasDivider { return false }
             }
 
             return true
@@ -385,7 +395,6 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
         private func hashLines(_ lines: [NoteLine]) -> Int {
             var hasher = Hasher()
             for line in lines {
-                hasher.combine(line.id)
                 hasher.combine(line.text)
                 hasher.combine(line.isCheckbox)
                 hasher.combine(line.isChecked)
