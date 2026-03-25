@@ -13,11 +13,18 @@ A minimal floating sticky note for macOS. Translucent, always on top, lives in y
 - Auto-saves everything, remembers window position
 - No Dock icon
 
-## Build
+## Install
+
+```bash
+brew install aimenhallou/floatnote/floatnote
+```
+
+## Build from Source
 
 ```bash
 swift build
-open FloatNote.app  # after copying: cp .build/debug/FloatNote FloatNote.app/Contents/MacOS/FloatNote
+cp .build/debug/FloatNote FloatNote.app/Contents/MacOS/FloatNote
+open FloatNote.app
 ```
 
 Or open `Package.swift` in Xcode and hit `Cmd+R`.
