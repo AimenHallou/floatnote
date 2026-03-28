@@ -45,28 +45,32 @@ enum AttributedStringBuilder {
     static func parseLines(from textStorage: NSTextStorage, fontSize: CGFloat) -> [NoteLine] {
         var lines: [NoteLine] = []
         let fullString = textStorage.string as NSString
-        let fullRange = NSRange(location: 0, length: textStorage.length)
+        let totalLength = textStorage.length
 
-        // Enumerate paragraph by paragraph
-        fullString.enumerateSubstrings(in: fullRange, options: .byParagraphs) { substring, _, _, _ in
-            guard let substring = substring else { return }
+        // Enumerate paragraph by paragraph using character ranges to avoid
+        // the first-occurrence-of-substring bug when duplicate text exists.
+        var searchLocation = 0
+        while searchLocation <= totalLength {
+            let charRange = NSRange(location: searchLocation, length: 0)
+            let paragraphRange = fullString.paragraphRange(for: charRange)
 
-            // Determine the range for this paragraph in the attributed string
-            let paragraphStart = fullString.range(of: substring).location
-            let paragraphRange: NSRange
-            if paragraphStart == NSNotFound {
-                // Fallback: scan from current offset
-                paragraphRange = NSRange(location: 0, length: 0)
+            // Extract the substring for this paragraph (excluding trailing newline)
+            let contentRange: NSRange
+            if paragraphRange.length > 0 &&
+               fullString.character(at: paragraphRange.location + paragraphRange.length - 1) == unichar(("\n" as UnicodeScalar).value) {
+                contentRange = NSRange(location: paragraphRange.location, length: paragraphRange.length - 1)
             } else {
-                paragraphRange = NSRange(location: paragraphStart, length: (substring as NSString).length)
+                contentRange = paragraphRange
             }
 
-            // Read the line style tag if present
+            let substring = fullString.substring(with: contentRange)
+
+            // Read the line style tag directly from the correct paragraph range
             var detectedStyle: LineStyle = .text
             var isCheckbox = false
             var isChecked = false
 
-            if paragraphRange.length > 0 && paragraphRange.location + paragraphRange.length <= textStorage.length {
+            if paragraphRange.length > 0 && paragraphRange.location < totalLength {
                 let attrs = textStorage.attributes(at: paragraphRange.location, effectiveRange: nil)
                 if let styleRaw = attrs[.floatNoteLineStyle] as? String,
                    let style = LineStyle(rawValue: styleRaw) {
@@ -85,8 +89,9 @@ enum AttributedStringBuilder {
             // Detect checkbox from attachment presence in the paragraph range
             if detectedStyle == .text {
                 // Walk attributes in range to detect CheckboxAttachment
-                if paragraphRange.length > 0 && paragraphRange.location + paragraphRange.length <= textStorage.length {
-                    textStorage.enumerateAttribute(.attachment, in: paragraphRange, options: []) { value, _, _ in
+                if paragraphRange.length > 0 && paragraphRange.location < totalLength {
+                    let checkRange = NSRange(location: paragraphRange.location, length: min(paragraphRange.length, totalLength - paragraphRange.location))
+                    textStorage.enumerateAttribute(.attachment, in: checkRange, options: []) { value, _, _ in
                         if let attachment = value as? CheckboxAttachment {
                             isCheckbox = true
                             isChecked = attachment.isChecked
@@ -103,15 +108,26 @@ enum AttributedStringBuilder {
 
             if detectedStyle == .divider {
                 lines.append(NoteLine(isCheckbox: false, isChecked: false, style: .divider, text: ""))
-                return
+            } else {
+                lines.append(NoteLine(
+                    isCheckbox: isCheckbox,
+                    isChecked: isChecked,
+                    style: detectedStyle,
+                    text: plainText
+                ))
             }
 
-            lines.append(NoteLine(
-                isCheckbox: isCheckbox,
-                isChecked: isChecked,
-                style: detectedStyle,
-                text: plainText
-            ))
+            // Advance past this paragraph
+            let nextLocation = paragraphRange.location + paragraphRange.length
+            if nextLocation <= searchLocation {
+                break  // Safety: prevent infinite loop
+            }
+            searchLocation = nextLocation
+
+            // If we've consumed all characters, stop (avoids processing an extra empty paragraph)
+            if searchLocation >= totalLength {
+                break
+            }
         }
 
         if lines.isEmpty {
