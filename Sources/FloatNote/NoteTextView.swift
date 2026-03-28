@@ -20,14 +20,29 @@ final class CheckboxAttachment: NSTextAttachment {
     }
     var lineIndex: Int = 0
 
+    convenience init() {
+        self.init(data: nil, ofType: nil)
+    }
+
     override init(data contentData: Data?, ofType uti: String?) {
         super.init(data: contentData, ofType: uti)
+        self.allowsTextAttachmentView = true
         updateImage()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
+        self.allowsTextAttachmentView = true
         updateImage()
+    }
+
+    override func viewProvider(
+        for parentView: NSView?,
+        location: any NSTextLocation,
+        textContainer: NSTextContainer?
+    ) -> NSTextAttachmentViewProvider? {
+        let provider = CheckboxViewProvider(textAttachment: self, parentView: parentView, textLayoutManager: textContainer?.textLayoutManager, location: location)
+        return provider
     }
 
     func updateImage() {
