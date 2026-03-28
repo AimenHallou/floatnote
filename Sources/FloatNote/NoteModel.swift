@@ -192,6 +192,9 @@ final class NoteModel: Identifiable {
     @ObservationIgnored
     private let globalSettings: GlobalSettings
 
+    @ObservationIgnored
+    private var isInitializing = true
+
     init(id: UUID, text: String? = nil, config: NoteConfig? = nil,
          persistence: PersistenceManager = .shared,
          globalSettings: GlobalSettings = .shared) {
@@ -209,6 +212,7 @@ final class NoteModel: Identifiable {
         let content = text ?? persistence.loadNote(id: id)
         lines = Self.parse(content)
         if lines.isEmpty { lines = [NoteLine()] }
+        self.isInitializing = false
     }
 
     // MARK: - Parse / Serialize
@@ -319,6 +323,7 @@ final class NoteModel: Identifiable {
     // MARK: - Persistence
 
     private func saveConfig() {
+        guard !isInitializing else { return }
         var config = persistence.loadNoteConfig(id: id)
         config.name = name
         config.fontSize = fontSizeOverride
@@ -330,6 +335,7 @@ final class NoteModel: Identifiable {
     }
 
     private func scheduleSave() {
+        guard !isInitializing else { return }
         saveWorkItem?.cancel()
         let text = serialize()
         let noteId = id
