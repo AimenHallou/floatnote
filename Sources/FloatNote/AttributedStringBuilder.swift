@@ -86,6 +86,18 @@ enum AttributedStringBuilder {
                 plainText = String(plainText.dropFirst(2))
             }
 
+            // Strip blockquote prefix if present
+            if detectedStyle == .blockquote && plainText.hasPrefix("> ") {
+                plainText = String(plainText.dropFirst(2))
+            }
+
+            // Strip numbered list prefix "N. " if present
+            if detectedStyle == .numberedList,
+               plainText.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil,
+               let spaceRange = plainText.range(of: ". ") {
+                plainText = String(plainText[spaceRange.upperBound...])
+            }
+
             // Detect checkbox from attachment presence in the paragraph range
             if detectedStyle == .text {
                 // Walk attributes in range to detect CheckboxAttachment
@@ -237,6 +249,44 @@ enum AttributedStringBuilder {
             ]
             attachmentString.addAttributes(dividerAttrs, range: NSRange(location: 0, length: attachmentString.length))
             return attachmentString
+
+        case (false, .codeBlock):
+            let monoFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            let paraStyle = NSMutableParagraphStyle()
+            paraStyle.headIndent = 8
+            paraStyle.firstLineHeadIndent = 8
+            let attrs: [NSAttributedString.Key: Any] = styleTag.merging([
+                .font: monoFont,
+                .foregroundColor: resolvedColor,
+                .backgroundColor: NSColor.quaternaryLabelColor,
+                .paragraphStyle: paraStyle
+            ]) { $1 }
+            return NSMutableAttributedString(string: line.text, attributes: attrs)
+
+        case (false, .blockquote):
+            let paraStyle = NSMutableParagraphStyle()
+            paraStyle.headIndent = 20
+            paraStyle.firstLineHeadIndent = 20
+            let attrs: [NSAttributedString.Key: Any] = styleTag.merging([
+                .font: roundedFont(size: fontSize, bold: false),
+                .foregroundColor: resolvedColor,
+                .paragraphStyle: paraStyle
+            ]) { $1 }
+            return NSMutableAttributedString(string: line.text, attributes: attrs)
+
+        case (false, .numberedList):
+            let prefixAttrs: [NSAttributedString.Key: Any] = styleTag.merging([
+                .font: roundedFont(size: fontSize, bold: false),
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]) { $1 }
+            let textAttrs: [NSAttributedString.Key: Any] = styleTag.merging([
+                .font: roundedFont(size: fontSize, bold: false),
+                .foregroundColor: resolvedColor
+            ]) { $1 }
+            let result = NSMutableAttributedString()
+            result.append(NSAttributedString(string: "1. ", attributes: prefixAttrs))
+            result.append(NSAttributedString(string: line.text, attributes: textAttrs))
+            return result
         }
     }
 }

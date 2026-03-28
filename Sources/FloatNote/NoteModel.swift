@@ -41,12 +41,14 @@ enum NoteTint: String, Codable, CaseIterable, Identifiable {
 
 enum LineStyle: String, Equatable {
     case text, heading, bullet, divider
+    case codeBlock, blockquote, numberedList
 }
 
 // MARK: - SlashCommand
 
 enum SlashCommand: CaseIterable {
     case todo, heading, bullet, divider, clearCompleted, plainText
+    case codeBlock, blockquote, numberedList
 
     var label: String {
         switch self {
@@ -56,6 +58,9 @@ enum SlashCommand: CaseIterable {
         case .divider:        return "Divider"
         case .clearCompleted: return "Clear completed"
         case .plainText:      return "Plain text"
+        case .codeBlock:      return "Code Block"
+        case .blockquote:     return "Blockquote"
+        case .numberedList:   return "Numbered List"
         }
     }
 
@@ -67,6 +72,9 @@ enum SlashCommand: CaseIterable {
         case .divider:        return "minus"
         case .clearCompleted: return "trash"
         case .plainText:      return "text.alignleft"
+        case .codeBlock:      return "chevron.left.forwardslash.chevron.right"
+        case .blockquote:     return "text.quote"
+        case .numberedList:   return "list.number"
         }
     }
 }
@@ -218,6 +226,14 @@ final class NoteModel: Identifiable {
                 return NoteLine(style: .bullet, text: String(line.dropFirst(2)))
             } else if line == "---" {
                 return NoteLine(style: .divider)
+            } else if line.hasPrefix("> ") {
+                return NoteLine(style: .blockquote, text: String(line.dropFirst(2)))
+            } else if line.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil {
+                // Strip "N. " prefix
+                if let spaceRange = line.range(of: ". ") {
+                    return NoteLine(style: .numberedList, text: String(line[spaceRange.upperBound...]))
+                }
+                return NoteLine(style: .numberedList, text: line)
             } else {
                 return NoteLine(text: line)
             }
@@ -230,10 +246,13 @@ final class NoteModel: Identifiable {
                 return "- [\(line.isChecked ? "x" : " ")] \(line.text)"
             }
             switch line.style {
-            case .heading:  return "# \(line.text)"
-            case .bullet:   return "• \(line.text)"
-            case .divider:  return "---"
-            case .text:     return line.text
+            case .heading:      return "# \(line.text)"
+            case .bullet:       return "• \(line.text)"
+            case .divider:      return "---"
+            case .text:         return line.text
+            case .codeBlock:    return "```\n\(line.text)\n```"
+            case .blockquote:   return "> \(line.text)"
+            case .numberedList: return "1. \(line.text)"
             }
         }.joined(separator: "\n")
     }
@@ -263,6 +282,18 @@ final class NoteModel: Identifiable {
             lines[index].isCheckbox = false
             lines[index].isChecked = false
             lines[index].style = .text
+        case .codeBlock:
+            lines[index].isCheckbox = false
+            lines[index].isChecked = false
+            lines[index].style = .codeBlock
+        case .blockquote:
+            lines[index].isCheckbox = false
+            lines[index].isChecked = false
+            lines[index].style = .blockquote
+        case .numberedList:
+            lines[index].isCheckbox = false
+            lines[index].isChecked = false
+            lines[index].style = .numberedList
         case .clearCompleted:
             clearCompleted()
         }
