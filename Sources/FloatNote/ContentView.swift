@@ -221,9 +221,6 @@ struct TabItemView: View {
                         .foregroundStyle(isActive ? .primary : .secondary)
                 }
             }
-            .contentShape(Rectangle())
-            .overlay(TabClickHandler(onSingleClick: onSelect, onDoubleClick: onStartRename))
-
             // Close button — sits outside the click handler overlay
             if canDelete {
                 Button(action: onDelete) {
@@ -238,8 +235,10 @@ struct TabItemView: View {
                 .allowsHitTesting(isActive && !isEditing)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .overlay(TabClickHandler(onSingleClick: onSelect, onDoubleClick: onStartRename))
         .background(
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(isActive ? Color.primary.opacity(0.08) : Color.clear)
