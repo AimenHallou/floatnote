@@ -113,6 +113,39 @@ struct AttributedStringBuilderTests {
         #expect(result[5].text == "Plain text")
     }
 
+    @Test("Blockquote round-trip")
+    func blockquote() {
+        let lines = [NoteLine(isCheckbox: false, isChecked: false, style: .blockquote, text: "Quoted text")]
+        let result = roundTrip(lines)
+        #expect(result.count == 1)
+        #expect(result[0].style == .blockquote)
+        #expect(result[0].isCheckbox == false)
+        #expect(result[0].isChecked == false)
+        #expect(result[0].text == "Quoted text")
+    }
+
+    @Test("Numbered list round-trip")
+    func numberedList() {
+        let lines = [NoteLine(isCheckbox: false, isChecked: false, style: .numberedList, text: "First item")]
+        let result = roundTrip(lines)
+        #expect(result.count == 1)
+        #expect(result[0].style == .numberedList)
+        #expect(result[0].isCheckbox == false)
+        #expect(result[0].isChecked == false)
+        #expect(result[0].text == "First item")
+    }
+
+    @Test("Code block round-trip")
+    func codeBlock() {
+        let lines = [NoteLine(isCheckbox: false, isChecked: false, style: .codeBlock, text: "let x = 1")]
+        let result = roundTrip(lines)
+        #expect(result.count == 1)
+        #expect(result[0].style == .codeBlock)
+        #expect(result[0].isCheckbox == false)
+        #expect(result[0].isChecked == false)
+        #expect(result[0].text == "let x = 1")
+    }
+
     @Test("Duplicate lines preserve styles")
     func duplicateLines() {
         let lines: [NoteLine] = [

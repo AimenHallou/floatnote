@@ -92,6 +92,35 @@ struct NoteModelCommandTests {
         #expect(note.lines.count >= 1)
     }
 
+    // MARK: - .codeBlock / .blockquote / .numberedList
+
+    @Test("applySlashCommand .codeBlock sets style")
+    func codeBlockCommand() {
+        let (note, helper) = makeNote("Hello")
+        let lineId = note.lines[0].id
+        note.applySlashCommand(.codeBlock, to: lineId)
+        #expect(note.lines[0].style == .codeBlock)
+        helper.cleanup()
+    }
+
+    @Test("applySlashCommand .blockquote sets style")
+    func blockquoteCommand() {
+        let (note, helper) = makeNote("Hello")
+        let lineId = note.lines[0].id
+        note.applySlashCommand(.blockquote, to: lineId)
+        #expect(note.lines[0].style == .blockquote)
+        helper.cleanup()
+    }
+
+    @Test("applySlashCommand .numberedList sets style")
+    func numberedListCommand() {
+        let (note, helper) = makeNote("Hello")
+        let lineId = note.lines[0].id
+        note.applySlashCommand(.numberedList, to: lineId)
+        #expect(note.lines[0].style == .numberedList)
+        helper.cleanup()
+    }
+
     // MARK: - Nonexistent lineId
 
     @Test("applySlashCommand to nonexistent lineId is no-op")

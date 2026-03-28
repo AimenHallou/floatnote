@@ -121,6 +121,22 @@ struct NoteModelParseTests {
         #expect(lines[5].text == "Plain")
     }
 
+    @Test("blockquote round-trip")
+    func blockquoteRoundTrip() {
+        let lines = NoteModel.parse("> This is quoted")
+        #expect(lines.count == 1)
+        #expect(lines[0].style == .blockquote)
+        #expect(lines[0].text == "This is quoted")
+    }
+
+    @Test("numbered list round-trip")
+    func numberedListRoundTrip() {
+        let lines = NoteModel.parse("1. First item")
+        #expect(lines.count == 1)
+        #expect(lines[0].style == .numberedList)
+        #expect(lines[0].text == "First item")
+    }
+
     // MARK: - Serialize stability
 
     @Test("serialize then re-parse is stable")
