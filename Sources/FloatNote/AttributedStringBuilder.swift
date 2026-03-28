@@ -1,4 +1,5 @@
 import AppKit
+import Markdown
 
 // MARK: - Custom NSAttributedString Keys
 
@@ -18,9 +19,12 @@ enum AttributedStringBuilder {
         fontSize: CGFloat,
         textColor: NoteTint
     ) -> NSMutableAttributedString {
-        let result = NSMutableAttributedString()
-        let resolvedColor = textColor.nsColor
+        let resolvedColor = textColor == .clear ? NSColor.labelColor : textColor.nsColor
 
+        // Serialize lines to markdown, then render via swift-markdown AST.
+        // Each line is rendered independently to preserve empty lines and avoid
+        // markdown grouping (e.g. consecutive bullets merging into one list).
+        let result = NSMutableAttributedString()
         let baseFont = roundedFont(size: fontSize, bold: false)
         let newlineAttrs: [NSAttributedString.Key: Any] = [
             .font: baseFont,
@@ -29,7 +33,27 @@ enum AttributedStringBuilder {
         ]
 
         for (index, line) in lines.enumerated() {
-            let paragraph = buildParagraph(for: line, fontSize: fontSize, resolvedColor: resolvedColor, lineIndex: index)
+            let markdownText: String
+            if line.isCheckbox {
+                markdownText = line.isChecked ? "- [x] \(line.text)" : "- [ ] \(line.text)"
+            } else {
+                switch line.style {
+                case .heading:      markdownText = "# \(line.text)"
+                case .bullet:       markdownText = "- \(line.text)"
+                case .divider:      markdownText = "---"
+                case .codeBlock:    markdownText = "```\n\(line.text)\n```"
+                case .blockquote:   markdownText = "> \(line.text)"
+                case .numberedList: markdownText = "1. \(line.text)"
+                case .text:         markdownText = line.text
+                }
+            }
+
+            let paragraph = MarkdownRenderer.render(
+                markdown: markdownText,
+                fontSize: fontSize,
+                textColor: resolvedColor
+            )
+
             // Append newline between lines (not after the last one)
             if index < lines.count - 1 {
                 paragraph.append(NSAttributedString(string: "\n", attributes: newlineAttrs))
