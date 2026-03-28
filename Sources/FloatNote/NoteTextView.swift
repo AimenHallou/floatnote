@@ -171,6 +171,41 @@ final class NoteTextView: NSTextView {
         )
     }
 
+    private func isOverCheckbox(at point: NSPoint) -> Bool {
+        guard let layoutManager = layoutManager,
+              let textContainer = textContainer,
+              let textStorage = textStorage else { return false }
+        let textPoint = NSPoint(x: point.x - textContainerInset.width,
+                                y: point.y - textContainerInset.height)
+        let charIndex = layoutManager.characterIndex(
+            for: textPoint, in: textContainer,
+            fractionOfDistanceBetweenInsertionPoints: nil)
+        guard charIndex < textStorage.length else { return false }
+        return textStorage.attribute(.attachment, at: charIndex, effectiveRange: nil) is CheckboxAttachment
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if isOverCheckbox(at: point) {
+            NSCursor.pointingHand.set()
+        } else {
+            super.mouseMoved(with: event)
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas where area.owner === self {
+            removeTrackingArea(area)
+        }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
     // MARK: Init
 
     override init(frame: CGRect, textContainer: NSTextContainer?) {
