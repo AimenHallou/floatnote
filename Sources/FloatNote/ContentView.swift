@@ -3,11 +3,12 @@ import AppKit
 
 // MARK: - Slash Menu State
 
-final class SlashMenuState: ObservableObject {
-    @Published var isVisible = false
-    @Published var filter = ""
-    @Published var selectedIndex = 0
-    @Published var charIndex: Int?
+@Observable
+final class SlashMenuState {
+    var isVisible = false
+    var filter = ""
+    var selectedIndex = 0
+    var charIndex: Int?
 
     var filteredCommands: [SlashCommand] {
         if filter.isEmpty { return SlashCommand.allCases }
@@ -323,7 +324,7 @@ struct NoteEditorView: View {
 
     @ObservedObject var model: NoteModel
     @ObservedObject private var global = GlobalSettings.shared
-    @StateObject private var slashMenu = SlashMenuState()
+    @State private var slashMenu = SlashMenuState()
     let isWindowHovering: Bool
     @State private var slashMenuPosition: CGPoint?
 
@@ -362,7 +363,7 @@ struct NoteEditorView: View {
 // MARK: - Slash Menu Overlay
 
 struct SlashMenuOverlay: View {
-    @ObservedObject var slashMenu: SlashMenuState
+    var slashMenu: SlashMenuState
     let onSelect: (SlashCommand) -> Void
 
     var body: some View {

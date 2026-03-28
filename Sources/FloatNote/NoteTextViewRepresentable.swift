@@ -6,7 +6,7 @@ import SwiftUI
 struct NoteTextViewRepresentable: NSViewRepresentable {
 
     @ObservedObject var model: NoteModel
-    @ObservedObject var slashMenu: SlashMenuState
+    var slashMenu: SlashMenuState
     @Binding var slashMenuPosition: CGPoint?
 
     // MARK: makeNSView
