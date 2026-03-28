@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import Combine
 
 // MARK: - NoteTint
 
@@ -314,18 +313,27 @@ final class NoteModel: Identifiable {
 
 // MARK: - NoteStore
 
-final class NoteStore: ObservableObject {
+@Observable
+final class NoteStore {
 
-    @Published var notes: [NoteModel] = []
-    @Published var activeNoteId: UUID? {
+    var notes: [NoteModel] = []
+    var activeNoteId: UUID? {
         didSet {
             if let id = activeNoteId {
-                PersistenceManager.shared.saveActiveNoteId(id)
+                persistence.saveActiveNoteId(id)
             }
         }
     }
 
-    private let persistence = PersistenceManager.shared
+    @ObservationIgnored
+    private let persistence: PersistenceManager
+    @ObservationIgnored
+    private let globalSettings: GlobalSettings
+
+    init(persistence: PersistenceManager = .shared, globalSettings: GlobalSettings = .shared) {
+        self.persistence = persistence
+        self.globalSettings = globalSettings
+    }
 
     var activeNote: NoteModel? {
         notes.first { $0.id == activeNoteId }
@@ -339,7 +347,7 @@ final class NoteStore: ObservableObject {
             persistence.saveNoteConfig(config, id: noteId)
             persistence.saveNote(migration.text, id: noteId)
             persistence.saveNoteIds([noteId])
-            notes = [NoteModel(id: noteId, config: config)]
+            notes = [NoteModel(id: noteId, config: config, persistence: persistence, globalSettings: globalSettings)]
             activeNoteId = noteId
             return
         }
@@ -348,7 +356,7 @@ final class NoteStore: ObservableObject {
         if ids.isEmpty {
             addNote()
         } else {
-            notes = ids.map { NoteModel(id: $0) }
+            notes = ids.map { NoteModel(id: $0, persistence: persistence, globalSettings: globalSettings) }
             let savedActive = persistence.loadActiveNoteId()
             activeNoteId = notes.contains(where: { $0.id == savedActive }) ? savedActive : notes.first?.id
         }
@@ -361,7 +369,7 @@ final class NoteStore: ObservableObject {
         config.name = "Note \(notes.count + 1)"
         persistence.saveNoteConfig(config, id: id)
         persistence.saveNote("", id: id)
-        let model = NoteModel(id: id, config: config)
+        let model = NoteModel(id: id, config: config, persistence: persistence, globalSettings: globalSettings)
         notes.append(model)
         activeNoteId = id
         saveNoteIds()

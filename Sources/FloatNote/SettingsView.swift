@@ -11,7 +11,7 @@ enum SettingsTab: Hashable {
 struct SettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var store: NoteStore
+    @Bindable var store: NoteStore
     @State private var selectedTab: SettingsTab = .general
 
     var body: some View {

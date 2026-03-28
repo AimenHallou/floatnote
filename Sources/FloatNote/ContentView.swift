@@ -50,7 +50,7 @@ final class SlashMenuState {
 
 struct ContentView: View {
 
-    @EnvironmentObject private var store: NoteStore
+    @Environment(NoteStore.self) private var store
     @State private var isHovering = false
     @State private var showSettings = false
 
@@ -98,7 +98,7 @@ struct ContentView: View {
 
 struct TabBar: View {
 
-    @EnvironmentObject private var store: NoteStore
+    @Environment(NoteStore.self) private var store
     let isWindowHovering: Bool
     let onOpenSettings: () -> Void
     @State private var editingTabId: UUID?

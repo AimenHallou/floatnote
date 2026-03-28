@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import Combine
 
 // MARK: - Notification Names
 
@@ -23,7 +22,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let store = NoteStore()
     private var statusItem: NSStatusItem?
     private let persistence = PersistenceManager.shared
-    private var opacityCancellable: AnyCancellable?
 
     // MARK: - NSApplicationDelegate
 
@@ -66,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.acceptsMouseMovedEvents = true
         panel.alphaValue = store.activeNote?.opacity ?? 0.85
 
-        let contentView = ContentView().environmentObject(store)
+        let contentView = ContentView().environment(store)
         let hostingView = NSHostingView(rootView: contentView)
         panel.contentView = hostingView
 
@@ -80,27 +78,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func observeOpacity() {
-        // React when switching tabs
-        opacityCancellable = store.$activeNoteId
-            .sink { [weak self] _ in
-                guard let self, let note = self.store.activeNote else { return }
-                self.panel.alphaValue = note.opacity
-            }
-
-        // Observe @Observable NoteModel opacity changes
-        observeActiveNoteOpacity()
-    }
-
-    private func observeActiveNoteOpacity() {
         withObservationTracking {
+            // Track both which note is active and its opacity
             if let note = store.activeNote {
                 let _ = note.opacity
             }
+            let _ = store.activeNoteId
         } onChange: { [weak self] in
             DispatchQueue.main.async {
-                guard let self, let note = self.store.activeNote else { return }
-                self.panel.alphaValue = note.opacity
-                self.observeActiveNoteOpacity()
+                guard let self else { return }
+                if let note = self.store.activeNote {
+                    self.panel.alphaValue = note.opacity
+                }
+                self.observeOpacity()
             }
         }
     }
