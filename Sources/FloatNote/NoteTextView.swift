@@ -20,29 +20,14 @@ final class CheckboxAttachment: NSTextAttachment {
     }
     var lineIndex: Int = 0
 
-    convenience init() {
-        self.init(data: nil, ofType: nil)
-    }
-
     override init(data contentData: Data?, ofType uti: String?) {
         super.init(data: contentData, ofType: uti)
-        self.allowsTextAttachmentView = true
         updateImage()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        self.allowsTextAttachmentView = true
         updateImage()
-    }
-
-    override func viewProvider(
-        for parentView: NSView?,
-        location: any NSTextLocation,
-        textContainer: NSTextContainer?
-    ) -> NSTextAttachmentViewProvider? {
-        let provider = CheckboxViewProvider(textAttachment: self, parentView: parentView, textLayoutManager: textContainer?.textLayoutManager, location: location)
-        return provider
     }
 
     func updateImage() {
@@ -149,6 +134,42 @@ final class NoteTextView: NSTextView {
     var slashMenu: SlashMenuState?
     var baseFontSize: CGFloat = 13
     var baseTextColor: NSColor = .labelColor
+
+    // MARK: - Checkbox Click Handling (TextKit 1)
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let layoutManager = layoutManager,
+              let textContainer = textContainer else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        let textPoint = NSPoint(x: point.x - textContainerInset.width,
+                                y: point.y - textContainerInset.height)
+        let charIndex = layoutManager.characterIndex(
+            for: textPoint,
+            in: textContainer,
+            fractionOfDistanceBetweenInsertionPoints: nil
+        )
+
+        guard charIndex < (textStorage?.length ?? 0),
+              let attachment = textStorage?.attribute(.attachment, at: charIndex, effectiveRange: nil) as? CheckboxAttachment else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        // Toggle the checkbox
+        attachment.isChecked.toggle()
+        NotificationCenter.default.post(
+            name: .floatNoteCheckboxToggled,
+            object: nil,
+            userInfo: [
+                "lineIndex": attachment.lineIndex,
+                "isChecked": attachment.isChecked
+            ]
+        )
+    }
 
     // MARK: Init
 
