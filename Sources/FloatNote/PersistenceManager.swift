@@ -45,7 +45,8 @@ final class PersistenceManager {
 
     static let shared = PersistenceManager()
 
-    private let defaults = UserDefaults.standard
+    let defaults: UserDefaults
+    let notesDir: URL
 
     private enum Key {
         static let noteIds  = "floatnote.noteIds"
@@ -58,18 +59,21 @@ final class PersistenceManager {
         }
     }
 
-    private var notesDir: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("FloatNote", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-
     private func noteFileURL(_ id: UUID) -> URL {
         notesDir.appendingPathComponent("\(id.uuidString).txt")
     }
 
-    private init() {}
+    init(defaults: UserDefaults, notesDirectory: URL) {
+        self.defaults = defaults
+        self.notesDir = notesDirectory
+        try? FileManager.default.createDirectory(at: notesDirectory, withIntermediateDirectories: true)
+    }
+
+    convenience init() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport.appendingPathComponent("FloatNote", isDirectory: true)
+        self.init(defaults: .standard, notesDirectory: dir)
+    }
 
     // MARK: - Global Config
 
