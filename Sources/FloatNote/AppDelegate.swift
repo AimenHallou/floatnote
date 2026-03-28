@@ -80,16 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func observeOpacity() {
-        let global = GlobalSettings.shared
-
-        // When active note or its override changes, or global opacity changes, update panel
+        // When active note changes or its effective opacity changes, update panel
         store.$activeNoteId
             .compactMap { [weak self] _ in self?.store.activeNote }
-            .map { $0.$opacityOverride }
+            .map { $0.$opacity }
             .switchToLatest()
-            .combineLatest(global.$opacity)
-            .sink { [weak self] override_, globalVal in
-                self?.panel.alphaValue = override_ ?? globalVal
+            .sink { [weak self] opacity in
+                self?.panel.alphaValue = opacity
             }
             .store(in: &opacityCancellables)
 

@@ -12,7 +12,6 @@ struct SettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: NoteStore
-    @ObservedObject private var global = GlobalSettings.shared
     @State private var selectedTab: SettingsTab = .general
 
     var body: some View {
@@ -48,7 +47,7 @@ struct SettingsView: View {
             case .general:
                 GeneralSettingsContent()
             case .global:
-                GlobalSettingsContent(global: global)
+                GlobalSettingsContent(global: GlobalSettings.shared)
             case .note(let id):
                 if let model = store.notes.first(where: { $0.id == id }) {
                     NoteSettingsContent(model: model, dismiss: dismiss)
@@ -284,7 +283,7 @@ struct HotkeyRecorderOverlay: NSViewRepresentable {
 
 struct GlobalSettingsContent: View {
 
-    @ObservedObject var global: GlobalSettings
+    @Bindable var global: GlobalSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

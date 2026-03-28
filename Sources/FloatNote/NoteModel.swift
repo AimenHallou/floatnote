@@ -92,25 +92,38 @@ struct NoteLine: Identifiable, Equatable {
 
 // MARK: - GlobalSettings
 
-final class GlobalSettings: ObservableObject {
+@Observable @MainActor
+final class GlobalSettings {
 
-    static let shared = GlobalSettings()
+    nonisolated(unsafe) static let shared = MainActor.assumeIsolated { GlobalSettings() }
 
-    @Published var fontSize: Double {
+    var fontSize: Double {
         didSet { save() }
     }
-    @Published var opacity: Double {
+    var opacity: Double {
         didSet { save() }
     }
-    @Published var tintColor: NoteTint {
+    var tintColor: NoteTint {
         didSet { save() }
     }
-    @Published var textColor: NoteTint {
+    var textColor: NoteTint {
         didSet { save() }
     }
+
+    @ObservationIgnored private let persistence: PersistenceManager
 
     private init() {
+        self.persistence = .shared
         let cfg = PersistenceManager.shared.loadGlobalConfig()
+        self.fontSize = cfg.fontSize
+        self.opacity = cfg.opacity
+        self.tintColor = cfg.tintColor
+        self.textColor = cfg.textColor
+    }
+
+    init(persistence: PersistenceManager) {
+        self.persistence = persistence
+        let cfg = persistence.loadGlobalConfig()
         self.fontSize = cfg.fontSize
         self.opacity = cfg.opacity
         self.tintColor = cfg.tintColor
@@ -122,7 +135,7 @@ final class GlobalSettings: ObservableObject {
             fontSize: fontSize, opacity: opacity,
             tintColor: tintColor, textColor: textColor
         )
-        PersistenceManager.shared.saveGlobalConfig(config)
+        self.persistence.saveGlobalConfig(config)
     }
 }
 
@@ -180,40 +193,88 @@ final class NoteModel: ObservableObject, Identifiable {
 
         // Set initial effective values
         let g = GlobalSettings.shared
-        self.fontSize = cfg.fontSize ?? g.fontSize
-        self.opacity = cfg.opacity ?? g.opacity
-        self.tintColor = cfg.tintColor ?? g.tintColor
-        self.textColor = cfg.textColor ?? g.textColor
+        let (gFontSize, gOpacity, gTintColor, gTextColor) = MainActor.assumeIsolated {
+            (g.fontSize, g.opacity, g.tintColor, g.textColor)
+        }
+        self.fontSize = cfg.fontSize ?? gFontSize
+        self.opacity = cfg.opacity ?? gOpacity
+        self.tintColor = cfg.tintColor ?? gTintColor
+        self.textColor = cfg.textColor ?? gTextColor
 
         let content = text ?? persistence.loadNote(id: id)
         lines = Self.parse(content)
         if lines.isEmpty { lines = [NoteLine()] }
 
-        setupEffectiveValues()
+        MainActor.assumeIsolated { setupEffectiveValues() }
     }
 
+    @MainActor
     private func setupEffectiveValues() {
         let g = GlobalSettings.shared
 
-        $fontSizeOverride.combineLatest(g.$fontSize)
-            .map { $0 ?? $1 }
-            .sink { [weak self] in self?.fontSize = $0 }
+        // Observe per-note overrides via Combine (NoteModel is still ObservableObject)
+        $fontSizeOverride
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] override in
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    self.fontSize = override ?? g.fontSize
+                }
+            }
             .store(in: &effectiveCancellables)
 
-        $opacityOverride.combineLatest(g.$opacity)
-            .map { $0 ?? $1 }
-            .sink { [weak self] in self?.opacity = $0 }
+        $opacityOverride
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] override in
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    self.opacity = override ?? g.opacity
+                }
+            }
             .store(in: &effectiveCancellables)
 
-        $tintColorOverride.combineLatest(g.$tintColor)
-            .map { $0 ?? $1 }
-            .sink { [weak self] in self?.tintColor = $0 }
+        $tintColorOverride
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] override in
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    self.tintColor = override ?? g.tintColor
+                }
+            }
             .store(in: &effectiveCancellables)
 
-        $textColorOverride.combineLatest(g.$textColor)
-            .map { $0 ?? $1 }
-            .sink { [weak self] in self?.textColor = $0 }
+        $textColorOverride
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] override in
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    self.textColor = override ?? g.textColor
+                }
+            }
             .store(in: &effectiveCancellables)
+
+        // Observe GlobalSettings (@Observable) changes by re-registering after each change
+        observeGlobalSettings()
+    }
+
+    @MainActor
+    private func observeGlobalSettings() {
+        let g = GlobalSettings.shared
+        withObservationTracking {
+            let _ = g.fontSize
+            let _ = g.opacity
+            let _ = g.tintColor
+            let _ = g.textColor
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.fontSize = self.fontSizeOverride ?? g.fontSize
+                self.opacity = self.opacityOverride ?? g.opacity
+                self.tintColor = self.tintColorOverride ?? g.tintColor
+                self.textColor = self.textColorOverride ?? g.textColor
+                self.observeGlobalSettings()
+            }
+        }
     }
 
     // MARK: - Parse / Serialize

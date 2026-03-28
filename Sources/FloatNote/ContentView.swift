@@ -51,7 +51,6 @@ final class SlashMenuState {
 struct ContentView: View {
 
     @EnvironmentObject private var store: NoteStore
-    @ObservedObject private var global = GlobalSettings.shared
     @State private var isHovering = false
     @State private var showSettings = false
 
@@ -323,7 +322,6 @@ struct RenameField: NSViewRepresentable {
 struct NoteEditorView: View {
 
     @ObservedObject var model: NoteModel
-    @ObservedObject private var global = GlobalSettings.shared
     @State private var slashMenu = SlashMenuState()
     let isWindowHovering: Bool
     @State private var slashMenuPosition: CGPoint?
