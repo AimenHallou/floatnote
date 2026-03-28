@@ -248,6 +248,12 @@ final class NoteTextView: NSTextView {
         // Check for bullet
         let isBulletStyle = styleTag == LineStyle.bullet.rawValue
 
+        // Check for blockquote
+        let isBlockquoteStyle = styleTag == LineStyle.blockquote.rawValue
+
+        // Check for numbered list
+        let isNumberedListStyle = styleTag == LineStyle.numberedList.rawValue
+
         if isCheckboxStyle {
             // Get text after the attachment + space
             let textAfterPrefix = textAfterCheckboxPrefix(paraRange: paraRange, storage: storage)
@@ -265,6 +271,23 @@ final class NoteTextView: NSTextView {
             } else {
                 super.insertNewline(sender)
                 insertBulletPrefix()
+            }
+        } else if isBlockquoteStyle {
+            let textAfterBlockquote = textAfterBlockquotePrefix(paraRange: paraRange, storage: storage)
+            if textAfterBlockquote.isEmpty {
+                removeBlockquotePrefix(in: paraRange, storage: storage)
+            } else {
+                super.insertNewline(sender)
+                insertBlockquotePrefix()
+            }
+        } else if isNumberedListStyle {
+            let textAfterNumber = textAfterNumberedPrefix(paraRange: paraRange, storage: storage)
+            if textAfterNumber.isEmpty {
+                removeNumberedListPrefix(in: paraRange, storage: storage)
+            } else {
+                let currentNumber = currentNumberedListNumber(paraRange: paraRange, storage: storage)
+                super.insertNewline(sender)
+                insertNumberedListPrefix(number: currentNumber + 1)
             }
         } else {
             super.insertNewline(sender)
@@ -301,7 +324,7 @@ final class NoteTextView: NSTextView {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: baseTextColor,
-            .floatNoteLineStyle: "checkbox"
+            .floatNoteLineStyle: LineStyle.text.rawValue
         ]
 
         let attachmentString = NSMutableAttributedString(attachment: attachment)
@@ -442,5 +465,145 @@ final class NoteTextView: NSTextView {
         let textLen = paraRange.length - prefixLen
         let raw = (storage.string as NSString).substring(with: NSRange(location: textStart, length: textLen))
         return raw.trimmingCharacters(in: .newlines)
+    }
+
+    private func textAfterBlockquotePrefix(paraRange: NSRange, storage: NSTextStorage) -> String {
+        let blockquotePrefix = "> "
+        let prefixLen = (blockquotePrefix as NSString).length
+        guard paraRange.length > prefixLen else { return "" }
+        let textStart = paraRange.location + prefixLen
+        let textLen = paraRange.length - prefixLen
+        let raw = (storage.string as NSString).substring(with: NSRange(location: textStart, length: textLen))
+        return raw.trimmingCharacters(in: .newlines)
+    }
+
+    private func textAfterNumberedPrefix(paraRange: NSRange, storage: NSTextStorage) -> String {
+        let paraString = (storage.string as NSString).substring(with: paraRange)
+        // Match "N. " prefix
+        guard let range = paraString.range(of: #"^\d+\. "#, options: .regularExpression) else { return "" }
+        let afterPrefix = String(paraString[range.upperBound...])
+        return afterPrefix.trimmingCharacters(in: .newlines)
+    }
+
+    private func currentNumberedListNumber(paraRange: NSRange, storage: NSTextStorage) -> Int {
+        let paraString = (storage.string as NSString).substring(with: paraRange)
+        guard let range = paraString.range(of: #"^\d+"#, options: .regularExpression) else { return 1 }
+        return Int(paraString[range]) ?? 1
+    }
+
+    private func insertBlockquotePrefix() {
+        guard let storage = textStorage,
+              let insertRange = selectedRanges.first as? NSRange else { return }
+
+        let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+        let prefixAttrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .floatNoteLineStyle: LineStyle.blockquote.rawValue
+        ]
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: baseTextColor,
+            .floatNoteLineStyle: LineStyle.blockquote.rawValue
+        ]
+        let prefix = NSAttributedString(string: "> ", attributes: prefixAttrs)
+
+        if shouldChangeText(in: insertRange, replacementString: "> ") {
+            storage.replaceCharacters(in: insertRange, with: prefix)
+            let newCursor = NSRange(location: insertRange.location + 2, length: 0)
+            setSelectedRange(newCursor)
+            typingAttributes = textAttrs
+            didChangeText()
+        }
+    }
+
+    private func insertNumberedListPrefix(number: Int) {
+        guard let storage = textStorage,
+              let insertRange = selectedRanges.first as? NSRange else { return }
+
+        let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+        let prefixAttrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .floatNoteLineStyle: LineStyle.numberedList.rawValue
+        ]
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: baseTextColor,
+            .floatNoteLineStyle: LineStyle.numberedList.rawValue
+        ]
+        let prefixString = "\(number). "
+        let prefix = NSAttributedString(string: prefixString, attributes: prefixAttrs)
+
+        if shouldChangeText(in: insertRange, replacementString: prefixString) {
+            storage.replaceCharacters(in: insertRange, with: prefix)
+            let newCursor = NSRange(location: insertRange.location + (prefixString as NSString).length, length: 0)
+            setSelectedRange(newCursor)
+            typingAttributes = textAttrs
+            didChangeText()
+        }
+    }
+
+    private func removeBlockquotePrefix(in paraRange: NSRange, storage: NSTextStorage) {
+        let blockquotePrefix = "> "
+        let prefixLen = (blockquotePrefix as NSString).length
+        guard paraRange.length >= prefixLen else { return }
+
+        let paraString = (storage.string as NSString).substring(with: paraRange)
+        guard paraString.hasPrefix(blockquotePrefix) else { return }
+
+        let removeRange = NSRange(location: paraRange.location, length: prefixLen)
+        if shouldChangeText(in: removeRange, replacementString: "") {
+            storage.beginEditing()
+            storage.replaceCharacters(in: removeRange, with: "")
+            let newParaLength = paraRange.length - prefixLen
+            if newParaLength > 0 {
+                let remainingRange = NSRange(location: paraRange.location, length: newParaLength)
+                storage.removeAttribute(.floatNoteLineStyle, range: remainingRange)
+            }
+            storage.endEditing()
+
+            let newCursor = NSRange(location: paraRange.location, length: 0)
+            setSelectedRange(newCursor)
+
+            let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+            typingAttributes = [
+                .font: font,
+                .foregroundColor: baseTextColor,
+                .floatNoteLineStyle: LineStyle.text.rawValue
+            ]
+
+            didChangeText()
+        }
+    }
+
+    private func removeNumberedListPrefix(in paraRange: NSRange, storage: NSTextStorage) {
+        let paraString = (storage.string as NSString).substring(with: paraRange)
+        guard let range = paraString.range(of: #"^\d+\. "#, options: .regularExpression) else { return }
+        let prefixLen = paraString.distance(from: paraString.startIndex, to: range.upperBound)
+
+        let removeRange = NSRange(location: paraRange.location, length: prefixLen)
+        if shouldChangeText(in: removeRange, replacementString: "") {
+            storage.beginEditing()
+            storage.replaceCharacters(in: removeRange, with: "")
+            let newParaLength = paraRange.length - prefixLen
+            if newParaLength > 0 {
+                let remainingRange = NSRange(location: paraRange.location, length: newParaLength)
+                storage.removeAttribute(.floatNoteLineStyle, range: remainingRange)
+            }
+            storage.endEditing()
+
+            let newCursor = NSRange(location: paraRange.location, length: 0)
+            setSelectedRange(newCursor)
+
+            let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+            typingAttributes = [
+                .font: font,
+                .foregroundColor: baseTextColor,
+                .floatNoteLineStyle: LineStyle.text.rawValue
+            ]
+
+            didChangeText()
+        }
     }
 }
