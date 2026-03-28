@@ -163,7 +163,7 @@ final class NoteTextView: NSTextView {
         attachment.isChecked.toggle()
         NotificationCenter.default.post(
             name: .floatNoteCheckboxToggled,
-            object: nil,
+            object: self,
             userInfo: [
                 "lineIndex": attachment.lineIndex,
                 "isChecked": attachment.isChecked
@@ -252,7 +252,7 @@ final class NoteTextView: NSTextView {
                 sm.hide()
                 NotificationCenter.default.post(
                     name: .floatNoteSlashCommandSelected,
-                    object: nil,
+                    object: self,
                     userInfo: ["command": command]
                 )
             }

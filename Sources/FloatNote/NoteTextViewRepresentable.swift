@@ -82,6 +82,7 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
 
         guard fontChanged || colorChanged || externalModelChange else { return }
 
+
         coordinator.isUpdatingFromModel = true
         defer { coordinator.isUpdatingFromModel = false }
 
@@ -158,7 +159,7 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
         func startObserving() {
             checkboxObserver = NotificationCenter.default.addObserver(
                 forName: .floatNoteCheckboxToggled,
-                object: nil,
+                object: textView,
                 queue: .main
             ) { [weak self] notification in
                 self?.handleCheckboxToggled(notification)
@@ -166,7 +167,7 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
 
             slashCommandObserver = NotificationCenter.default.addObserver(
                 forName: .floatNoteSlashCommandSelected,
-                object: nil,
+                object: textView,
                 queue: .main
             ) { [weak self] notification in
                 self?.handleSlashCommandSelected(notification)
@@ -282,7 +283,6 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
             guard let index = notification.userInfo?["lineIndex"] as? Int,
                   let isChecked = notification.userInfo?["isChecked"] as? Bool,
                   model.lines.indices.contains(index) else { return }
-
             model.lines[index].isChecked = isChecked
 
             // Apply strikethrough locally in text storage

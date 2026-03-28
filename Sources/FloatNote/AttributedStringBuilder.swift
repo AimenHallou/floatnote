@@ -54,6 +54,13 @@ enum AttributedStringBuilder {
                 textColor: resolvedColor
             )
 
+            // Set lineIndex on any CheckboxAttachment so toggle notifications identify the correct line
+            paragraph.enumerateAttribute(.attachment, in: NSRange(location: 0, length: paragraph.length), options: []) { value, _, _ in
+                if let checkbox = value as? CheckboxAttachment {
+                    checkbox.lineIndex = index
+                }
+            }
+
             // Append newline between lines (not after the last one)
             if index < lines.count - 1 {
                 paragraph.append(NSAttributedString(string: "\n", attributes: newlineAttrs))
