@@ -5,7 +5,7 @@ import SwiftUI
 
 struct NoteTextViewRepresentable: NSViewRepresentable {
 
-    @ObservedObject var model: NoteModel
+    var model: NoteModel
     var slashMenu: SlashMenuState
     @Binding var slashMenuPosition: CGPoint?
 

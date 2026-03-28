@@ -189,7 +189,7 @@ struct TabBar: View {
 
 struct TabItemView: View {
 
-    @ObservedObject var note: NoteModel
+    var note: NoteModel
     let isActive: Bool
     let isHovered: Bool
     let isEditing: Bool
@@ -321,7 +321,7 @@ struct RenameField: NSViewRepresentable {
 
 struct NoteEditorView: View {
 
-    @ObservedObject var model: NoteModel
+    var model: NoteModel
     @State private var slashMenu = SlashMenuState()
     let isWindowHovering: Bool
     @State private var slashMenuPosition: CGPoint?

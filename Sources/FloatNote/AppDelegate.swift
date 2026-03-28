@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let store = NoteStore()
     private var statusItem: NSStatusItem?
     private let persistence = PersistenceManager.shared
-    private var opacityCancellables = Set<AnyCancellable>()
+    private var opacityCancellable: AnyCancellable?
 
     // MARK: - NSApplicationDelegate
 
@@ -80,23 +80,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func observeOpacity() {
-        // When active note changes or its effective opacity changes, update panel
-        store.$activeNoteId
-            .compactMap { [weak self] _ in self?.store.activeNote }
-            .map { $0.$opacity }
-            .switchToLatest()
-            .sink { [weak self] opacity in
-                self?.panel.alphaValue = opacity
-            }
-            .store(in: &opacityCancellables)
-
-        // Also react when switching tabs immediately
-        store.$activeNoteId
+        // React when switching tabs
+        opacityCancellable = store.$activeNoteId
             .sink { [weak self] _ in
                 guard let self, let note = self.store.activeNote else { return }
                 self.panel.alphaValue = note.opacity
             }
-            .store(in: &opacityCancellables)
+
+        // Observe @Observable NoteModel opacity changes
+        observeActiveNoteOpacity()
+    }
+
+    private func observeActiveNoteOpacity() {
+        withObservationTracking {
+            if let note = store.activeNote {
+                let _ = note.opacity
+            }
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, let note = self.store.activeNote else { return }
+                self.panel.alphaValue = note.opacity
+                self.observeActiveNoteOpacity()
+            }
+        }
     }
 
     // MARK: - Toggle

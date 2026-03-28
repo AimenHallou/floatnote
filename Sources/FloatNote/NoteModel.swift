@@ -141,48 +141,56 @@ final class GlobalSettings {
 
 // MARK: - NoteModel
 
-final class NoteModel: ObservableObject, Identifiable {
+@Observable
+final class NoteModel: Identifiable {
 
     let id: UUID
 
-    @Published var name: String {
+    var name: String {
         didSet { saveConfig() }
     }
 
-    @Published var lines: [NoteLine] = [] {
+    var lines: [NoteLine] = [] {
         didSet { scheduleSave() }
     }
 
     // Per-note overrides (nil = use global)
-    @Published var fontSizeOverride: Double? {
+    var fontSizeOverride: Double? {
         didSet { saveConfig() }
     }
-    @Published var opacityOverride: Double? {
+    var opacityOverride: Double? {
         didSet { saveConfig() }
     }
-    @Published var tintColorOverride: NoteTint? {
+    var tintColorOverride: NoteTint? {
         didSet { saveConfig() }
     }
-    @Published var textColorOverride: NoteTint? {
-        didSet { saveConfig() }
-    }
-
-    @Published var isCollapsed: Bool {
+    var textColorOverride: NoteTint? {
         didSet { saveConfig() }
     }
 
-    // Effective values (override ?? global), kept in sync via Combine
-    @Published private(set) var fontSize: Double = 13
-    @Published private(set) var opacity: Double = 0.85
-    @Published private(set) var tintColor: NoteTint = .clear
-    @Published private(set) var textColor: NoteTint = .clear
+    var isCollapsed: Bool {
+        didSet { saveConfig() }
+    }
 
-    private var effectiveCancellables = Set<AnyCancellable>()
+    // Effective values — computed from override ?? global
+    var fontSize: Double { fontSizeOverride ?? globalSettings.fontSize }
+    var opacity: Double { opacityOverride ?? globalSettings.opacity }
+    var tintColor: NoteTint { tintColorOverride ?? globalSettings.tintColor }
+    var textColor: NoteTint { textColorOverride ?? globalSettings.textColor }
+
+    @ObservationIgnored
     private var saveWorkItem: DispatchWorkItem?
-    private let persistence = PersistenceManager.shared
+    @ObservationIgnored
+    private let persistence: PersistenceManager
+    @ObservationIgnored
+    private let globalSettings: GlobalSettings
 
-    init(id: UUID, text: String? = nil, config: NoteConfig? = nil) {
+    init(id: UUID, text: String? = nil, config: NoteConfig? = nil,
+         persistence: PersistenceManager = .shared,
+         globalSettings: GlobalSettings = .shared) {
         self.id = id
+        self.persistence = persistence
+        self.globalSettings = globalSettings
         let cfg = config ?? persistence.loadNoteConfig(id: id)
         self.name = cfg.name
         self.fontSizeOverride = cfg.fontSize
@@ -191,69 +199,9 @@ final class NoteModel: ObservableObject, Identifiable {
         self.textColorOverride = cfg.textColor
         self.isCollapsed = cfg.isCollapsed
 
-        // Set initial effective values
-        let g = GlobalSettings.shared
-        self.fontSize = cfg.fontSize ?? g.fontSize
-        self.opacity = cfg.opacity ?? g.opacity
-        self.tintColor = cfg.tintColor ?? g.tintColor
-        self.textColor = cfg.textColor ?? g.textColor
-
         let content = text ?? persistence.loadNote(id: id)
         lines = Self.parse(content)
         if lines.isEmpty { lines = [NoteLine()] }
-
-        setupEffectiveValues()
-    }
-
-    private func setupEffectiveValues() {
-        let g = GlobalSettings.shared
-
-        // Observe per-note overrides via Combine (NoteModel is still ObservableObject)
-        $fontSizeOverride
-            .sink { [weak self] override in
-                self?.fontSize = override ?? g.fontSize
-            }
-            .store(in: &effectiveCancellables)
-
-        $opacityOverride
-            .sink { [weak self] override in
-                self?.opacity = override ?? g.opacity
-            }
-            .store(in: &effectiveCancellables)
-
-        $tintColorOverride
-            .sink { [weak self] override in
-                self?.tintColor = override ?? g.tintColor
-            }
-            .store(in: &effectiveCancellables)
-
-        $textColorOverride
-            .sink { [weak self] override in
-                self?.textColor = override ?? g.textColor
-            }
-            .store(in: &effectiveCancellables)
-
-        // Observe GlobalSettings (@Observable) changes
-        observeGlobalSettings()
-    }
-
-    private func observeGlobalSettings() {
-        let g = GlobalSettings.shared
-        withObservationTracking {
-            let _ = g.fontSize
-            let _ = g.opacity
-            let _ = g.tintColor
-            let _ = g.textColor
-        } onChange: { [weak self] in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.fontSize = self.fontSizeOverride ?? g.fontSize
-                self.opacity = self.opacityOverride ?? g.opacity
-                self.tintColor = self.tintColorOverride ?? g.tintColor
-                self.textColor = self.textColorOverride ?? g.textColor
-                self.observeGlobalSettings()
-            }
-        }
     }
 
     // MARK: - Parse / Serialize
@@ -355,8 +303,9 @@ final class NoteModel: ObservableObject, Identifiable {
         saveWorkItem?.cancel()
         let text = serialize()
         let noteId = id
+        let pm = persistence
         let item = DispatchWorkItem {
-            PersistenceManager.shared.saveNote(text, id: noteId)
+            pm.saveNote(text, id: noteId)
         }
         saveWorkItem = item
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.3, execute: item)

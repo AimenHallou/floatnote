@@ -310,7 +310,7 @@ struct GlobalSettingsContent: View {
 
 struct NoteSettingsContent: View {
 
-    @ObservedObject var model: NoteModel
+    @Bindable var model: NoteModel
     let dismiss: DismissAction
 
     var body: some View {
