@@ -149,8 +149,6 @@ struct TabBar: View {
                 .help("New note")
             }
             .padding(.horizontal, 6)
-            .padding(.top, 6)
-            .padding(.bottom, 4)
         }
 
             // ── Settings button (top right) ─────────────────────────
@@ -164,9 +162,9 @@ struct TabBar: View {
             .pointerOnHover()
             .help("Settings")
             .padding(.trailing, 6)
-            .padding(.top, 6)
-            .padding(.bottom, 4)
         }
+        .padding(.top, 6)
+        .padding(.bottom, 4)
         // Separator line between tabs and content
         Divider()
             .opacity(0.3)
