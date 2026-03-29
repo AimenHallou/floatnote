@@ -165,6 +165,7 @@ struct TabBar: View {
             .help("Settings")
             .padding(.trailing, 6)
             .padding(.top, 6)
+            .padding(.bottom, 4)
         }
         // Separator line between tabs and content
         Divider()
