@@ -154,19 +154,17 @@ struct TabBar: View {
         }
 
             // ── Settings button (top right) ─────────────────────────
-            if isWindowHovering {
-                Button(action: onOpenSettings) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 18, height: 18)
-                }
-                .buttonStyle(.plain)
-                .pointerOnHover()
-                .help("Settings")
-                .padding(.trailing, 6)
-                .padding(.top, 6)
+            Button(action: onOpenSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 18, height: 18)
             }
+            .buttonStyle(.plain)
+            .pointerOnHover()
+            .help("Settings")
+            .padding(.trailing, 6)
+            .padding(.top, 6)
         }
         // Separator line between tabs and content
         Divider()
