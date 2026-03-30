@@ -399,6 +399,38 @@ final class NoteTextView: NSTextView {
     // MARK: - deleteBackward
 
     override func deleteBackward(_ sender: Any?) {
+        // If cursor is right after "attachment + space" with no text after it on this line,
+        // delete both at once so the user doesn't have to backspace twice
+        if let storage = textStorage,
+           let sel = selectedRanges.first as? NSRange,
+           sel.length == 0, sel.location >= 2 {
+            let fullString = storage.string as NSString
+            let paraRange = fullString.paragraphRange(for: NSRange(location: sel.location, length: 0))
+            // Cursor is at position 2 within the paragraph (right after attachment + space)
+            if sel.location == paraRange.location + 2,
+               fullString.character(at: paraRange.location) == 0xFFFC,
+               fullString.character(at: paraRange.location + 1) == 0x0020 {
+                // Check if there's no user text after the space on this line
+                let textAfter = textAfterCheckboxPrefix(paraRange: paraRange, storage: storage)
+                if textAfter.isEmpty {
+                    let removeRange = NSRange(location: paraRange.location, length: 2)
+                    if shouldChangeText(in: removeRange, replacementString: "") {
+                        storage.replaceCharacters(in: removeRange, with: "")
+                        let newCursor = NSRange(location: paraRange.location, length: 0)
+                        setSelectedRange(newCursor)
+                        let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
+                        typingAttributes = [
+                            .font: font,
+                            .foregroundColor: baseTextColor,
+                            .floatNoteLineStyle: LineStyle.text.rawValue
+                        ]
+                        didChangeText()
+                        return
+                    }
+                }
+            }
+        }
+
         super.deleteBackward(sender)
         // After any deletion, ensure typing attributes have the correct color/font
         let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
