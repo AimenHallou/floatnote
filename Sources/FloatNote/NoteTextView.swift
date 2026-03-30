@@ -19,6 +19,9 @@ final class CheckboxAttachment: NSTextAttachment {
         didSet { updateImage() }
     }
     var lineIndex: Int = 0
+    var fontSize: CGFloat = 14 {
+        didSet { updateImage() }
+    }
 
     override init(data contentData: Data?, ofType uti: String?) {
         super.init(data: contentData, ofType: uti)
@@ -32,7 +35,8 @@ final class CheckboxAttachment: NSTextAttachment {
 
     func updateImage() {
         let symbolName = isChecked ? "checkmark.square.fill" : "square"
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        let symbolSize = fontSize * 0.85
+        let config = NSImage.SymbolConfiguration(pointSize: symbolSize, weight: .regular)
             .applying(.init(paletteColors: [.labelColor]))
         self.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
             .withSymbolConfiguration(config)
@@ -44,8 +48,9 @@ final class CheckboxAttachment: NSTextAttachment {
         glyphPosition position: CGPoint,
         characterIndex charIndex: Int
     ) -> CGRect {
-        let size: CGFloat = 16
-        let yOffset = (lineFrag.height - size) / 2
+        let size = fontSize * 0.85
+        let font = NSFont.systemFont(ofSize: fontSize)
+        let yOffset = (font.capHeight - size) / 2
         return CGRect(x: 0, y: yOffset, width: size, height: size)
     }
 }
@@ -134,6 +139,21 @@ final class NoteTextView: NSTextView {
     var slashMenu: SlashMenuState?
     var baseFontSize: CGFloat = 13
     var baseTextColor: NSColor = .labelColor
+    private var shouldAutoCapitalize = false
+
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        if shouldAutoCapitalize, let str = string as? String, str.count == 1,
+           let first = str.first, first.isLetter {
+            shouldAutoCapitalize = false
+            super.insertText(String(first).uppercased(), replacementRange: replacementRange)
+            return
+        }
+        if shouldAutoCapitalize, let str = string as? String, str.count == 1,
+           let first = str.first, !first.isLetter {
+            shouldAutoCapitalize = false
+        }
+        super.insertText(string, replacementRange: replacementRange)
+    }
 
     // MARK: - Checkbox Click Handling (TextKit 1)
 
@@ -147,14 +167,17 @@ final class NoteTextView: NSTextView {
 
         let textPoint = NSPoint(x: point.x - textContainerInset.width,
                                 y: point.y - textContainerInset.height)
-        let charIndex = layoutManager.characterIndex(
-            for: textPoint,
-            in: textContainer,
-            fractionOfDistanceBetweenInsertionPoints: nil
-        )
+        let glyphIndex = layoutManager.glyphIndex(for: textPoint, in: textContainer)
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
 
         guard charIndex < (textStorage?.length ?? 0),
               let attachment = textStorage?.attribute(.attachment, at: charIndex, effectiveRange: nil) as? CheckboxAttachment else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        let glyphRect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
+        guard glyphRect.contains(textPoint) else {
             super.mouseDown(with: event)
             return
         }
@@ -177,10 +200,11 @@ final class NoteTextView: NSTextView {
               let textStorage = textStorage else { return false }
         let textPoint = NSPoint(x: point.x - textContainerInset.width,
                                 y: point.y - textContainerInset.height)
-        let charIndex = layoutManager.characterIndex(
-            for: textPoint, in: textContainer,
-            fractionOfDistanceBetweenInsertionPoints: nil)
+        let glyphIndex = layoutManager.glyphIndex(for: textPoint, in: textContainer)
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
         guard charIndex < textStorage.length else { return false }
+        let glyphRect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
+        guard glyphRect.contains(textPoint) else { return false }
         return textStorage.attribute(.attachment, at: charIndex, effectiveRange: nil) is CheckboxAttachment
     }
 
@@ -314,7 +338,7 @@ final class NoteTextView: NSTextView {
 
         // Check for checkbox: paragraph starts with a CheckboxAttachment
         let isCheckboxLine = paragraphStartsWithCheckbox(paraRange: paraRange, storage: storage)
-        let isCheckboxStyle = styleTag == LineStyle.text.rawValue && isCheckboxLine
+        let isCheckboxStyle = isCheckboxLine
 
         // Check for bullet
         let isBulletStyle = styleTag == LineStyle.bullet.rawValue
@@ -390,6 +414,7 @@ final class NoteTextView: NSTextView {
 
         let attachment = CheckboxAttachment()
         attachment.isChecked = false
+        attachment.fontSize = baseFontSize
 
         let font = AttributedStringBuilder.roundedFont(size: baseFontSize, bold: false)
         let attrs: [NSAttributedString.Key: Any] = [
@@ -416,6 +441,8 @@ final class NoteTextView: NSTextView {
             setSelectedRange(newCursor)
             typingAttributes = attrs
             didChangeText()
+            shouldAutoCapitalize = true
+            scrollRangeToVisible(newCursor)
         }
     }
 

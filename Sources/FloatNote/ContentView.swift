@@ -444,10 +444,21 @@ struct TabClickHandler: NSViewRepresentable {
     final class ClickView: NSView {
         var onSingleClick: (() -> Void)?
         var onDoubleClick: (() -> Void)?
+        private var mouseDownLocation: NSPoint?
 
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
         override func mouseDown(with event: NSEvent) {
+            mouseDownLocation = event.locationInWindow
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            guard let downLoc = mouseDownLocation else { return }
+            let dx = event.locationInWindow.x - downLoc.x
+            let dy = event.locationInWindow.y - downLoc.y
+            let distance = sqrt(dx * dx + dy * dy)
+            mouseDownLocation = nil
+            guard distance < 5 else { return }
             if event.clickCount == 2 {
                 onDoubleClick?()
             } else {

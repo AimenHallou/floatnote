@@ -236,6 +236,18 @@ struct NoteTextViewRepresentable: NSViewRepresentable {
             let slashRange = fullString.range(of: "/", options: .backwards, range: searchRange)
 
             if slashRange.location != NSNotFound {
+                // Only trigger slash menu if "/" is at the start of the paragraph or preceded by whitespace
+                let slashLoc = slashRange.location
+                if slashLoc > paraRange.location {
+                    let prevChar = fullString.character(at: slashLoc - 1)
+                    let prevScalar = Unicode.Scalar(prevChar)
+                    if let scalar = prevScalar, !CharacterSet.whitespaces.contains(scalar) {
+                        slashMenu.hide()
+                        slashMenuPosition.wrappedValue = nil
+                        return
+                    }
+                }
+
                 // Extract filter text after "/"
                 let afterSlashStart = slashRange.location + 1
                 let filterLength = cursorPos - afterSlashStart

@@ -211,6 +211,7 @@ enum AttributedStringBuilder {
             let attachment = CheckboxAttachment()
             attachment.isChecked = line.isChecked
             attachment.lineIndex = lineIndex
+            attachment.fontSize = fontSize
 
             let attachmentString = NSMutableAttributedString(attachment: attachment)
             attachmentString.addAttributes(styleTag, range: NSRange(location: 0, length: attachmentString.length))

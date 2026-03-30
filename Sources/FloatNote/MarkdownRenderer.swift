@@ -149,6 +149,7 @@ struct MarkdownRenderer: MarkupWalker {
             let isChecked = checkbox == .checked
             let attachment = CheckboxAttachment()
             attachment.isChecked = isChecked
+            attachment.fontSize = fontSize
 
             let font = AttributedStringBuilder.roundedFont(size: fontSize, bold: false)
             let checkboxAttrs: [NSAttributedString.Key: Any] = [
